@@ -50,6 +50,57 @@ public static class SeedDataService
             await db.SaveChangesAsync();
         }
 
+        // === 노트 유형 시드 ===
+        if (!await db.NoteTypes.AnyAsync())
+        {
+            db.NoteTypes.AddRange(
+                new NoteTypeEntity { Name = "댓글", Color = "#1976D2", Icon = "Comment", SortOrder = 1 },
+                new NoteTypeEntity { Name = "가이드", Color = "#388E3C", Icon = "MenuBook", SortOrder = 2 },
+                new NoteTypeEntity { Name = "우회방법", Color = "#F57C00", Icon = "Build", SortOrder = 3 },
+                new NoteTypeEntity { Name = "근본원인", Color = "#D32F2F", Icon = "FindInPage", SortOrder = 4 }
+            );
+            await db.SaveChangesAsync();
+
+            // 기존 CaseNote 데이터 마이그레이션 (NoteType int → NoteTypeId FK)
+            var noteTypeMap = await db.NoteTypes.ToDictionaryAsync(n => n.SortOrder - 1, n => n.Id);
+            var unmappedNotes = await db.CaseNotes.Where(n => n.NoteTypeId == null).ToListAsync();
+            foreach (var note in unmappedNotes)
+            {
+                if (noteTypeMap.TryGetValue(note.NoteType, out var typeId))
+                    note.NoteTypeId = typeId;
+            }
+            if (unmappedNotes.Count > 0) await db.SaveChangesAsync();
+        }
+
+        // === 링크 유형 시드 ===
+        if (!await db.LinkTypes.AnyAsync())
+        {
+            db.LinkTypes.AddRange(
+                new LinkTypeEntity { Name = "Jira", Color = "#2196F3", Icon = "BugReport", SortOrder = 1 },
+                new LinkTypeEntity { Name = "Confluence", Color = "#FF9800", Icon = "MenuBook", SortOrder = 2 },
+                new LinkTypeEntity { Name = "GitHub", Color = "#333333", Icon = "Code", SortOrder = 3 },
+                new LinkTypeEntity { Name = "GitLab", Color = "#FC6D26", Icon = "Code", SortOrder = 4 },
+                new LinkTypeEntity { Name = "기타", Color = "#9E9E9E", Icon = "Link", SortOrder = 5 }
+            );
+            await db.SaveChangesAsync();
+
+            // 기존 Link 데이터 마이그레이션 (LinkType int → LinkTypeId FK)
+            var linkTypeMap = await db.LinkTypes.ToDictionaryAsync(l => l.SortOrder - 1, l => l.Id);
+            var unmappedCaseLinks = await db.CaseLinks.Where(l => l.LinkTypeId == null).ToListAsync();
+            foreach (var link in unmappedCaseLinks)
+            {
+                if (linkTypeMap.TryGetValue(link.LinkType, out var typeId))
+                    link.LinkTypeId = typeId;
+            }
+            var unmappedTodoLinks = await db.TodoLinks.Where(l => l.LinkTypeId == null).ToListAsync();
+            foreach (var link in unmappedTodoLinks)
+            {
+                if (linkTypeMap.TryGetValue(link.LinkType, out var typeId))
+                    link.LinkTypeId = typeId;
+            }
+            if (unmappedCaseLinks.Count + unmappedTodoLinks.Count > 0) await db.SaveChangesAsync();
+        }
+
         // 이미 데이터가 있으면 건너뜀
         if (await db.Projects.AnyAsync()) return;
 

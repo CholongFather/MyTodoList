@@ -1,0 +1,106 @@
+@page "/settings/note-types"
+
+@inject NoteTypeApiClient NoteTypeApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>노트 유형 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.StickyNote2" Color="Color.Primary" />
+    <MudText Typo="Typo.h5">노트 유형 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    @if (_loading) { <MudProgressLinear Indeterminate /> }
+    else
+    {
+        <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
+            <thead><tr><th style="width:40px;">색상</th><th style="width:40px;">아이콘</th><th>이름</th><th style="width:80px;"></th></tr></thead>
+            <tbody>
+                @foreach (var nt in _noteTypes)
+                {
+                    <tr>
+                        <td><div style="width:24px;height:24px;border-radius:50%;background:@nt.Color;"></div></td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(nt.Icon))
+                            {
+                                <MudIcon Icon="@nt.Icon" Size="Size.Small" />
+                            }
+                        </td>
+                        <td>@nt.Name</td>
+                        <td style="text-align:right;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(nt))" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-3" Style="flex-wrap:wrap;">
+            <MudTextField T="string" @bind-Value="_newName" Label="유형 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
+            <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
+            <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
+            <MudTextField T="string" @bind-Value="_newIcon" Label="아이콘" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;"
+                          Placeholder="MudBlazor 아이콘 문자열" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private List<NoteTypeDto> _noteTypes = [];
+    private bool _loading = true;
+    private string _newName = "";
+    private string _newColor = "";
+    private string? _newIcon;
+
+    private static readonly string[] _palette =
+    [
+        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
+        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800",
+        "#FF5722", "#795548", "#607D8B", "#F44336", "#1976D2"
+    ];
+    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newColor = RandomColor();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _noteTypes = await NoteTypeApi.GetAllAsync(); } catch { } finally { _loading = false; }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        try
+        {
+            await NoteTypeApi.CreateAsync(new CreateNoteTypeRequest { Name = _newName, Color = _newColor, Icon = _newIcon });
+            _newName = "";
+            _newColor = RandomColor();
+            _newIcon = null;
+            await LoadAsync();
+            Snackbar.Add("노트 유형이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(NoteTypeDto nt)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("노트 유형 삭제", $"'{nt.Name}'을(를) 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+        try
+        {
+            await NoteTypeApi.DeleteAsync(nt.Id);
+            await LoadAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

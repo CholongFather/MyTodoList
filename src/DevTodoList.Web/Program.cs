@@ -49,6 +49,9 @@ builder.Services.AddScoped<EnvironmentApiClient>();
 builder.Services.AddScoped<HolidayApiClient>();
 builder.Services.AddScoped<AssigneeTypeApiClient>();
 builder.Services.AddScoped<BusStationApiClient>();
+builder.Services.AddScoped<WorkerApiClient>();
+builder.Services.AddScoped<NoteTypeApiClient>();
+builder.Services.AddScoped<LinkTypeApiClient>();
 
 var app = builder.Build();
 

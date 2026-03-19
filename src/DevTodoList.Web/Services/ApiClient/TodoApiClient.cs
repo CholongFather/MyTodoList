@@ -76,6 +76,13 @@ public class TodoApiClient(IHttpClientFactory factory)
         res.EnsureSuccessStatusCode();
     }
 
+    /// <summary>작업자 즉시 동기화</summary>
+    public async Task UpdateWorkersAsync(long id, List<long> workerIds)
+    {
+        var res = await Http.PatchAsJsonAsync($"api/todos/{id}/workers", new UpdateWorkersRequest { WorkerIds = workerIds });
+        res.EnsureSuccessStatusCode();
+    }
+
     /// <summary>담당 유형 즉시 변경</summary>
     public async Task UpdateAssigneeTypeAsync(long id, long? assigneeTypeId)
     {

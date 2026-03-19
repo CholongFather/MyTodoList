@@ -22,10 +22,13 @@ public class LinkService(AppDbContext db)
             Title = req.Title,
             Url = req.Url,
             LinkType = (int)req.LinkType,
+            LinkTypeId = req.LinkTypeId,
             TodoItemId = todoId
         };
         db.TodoLinks.Add(entity);
         await db.SaveChangesAsync(ct);
+        if (entity.LinkTypeId.HasValue)
+            await db.Entry(entity).Reference(l => l.LinkTypeEntity).LoadAsync(ct);
         return entity.ToDto();
     }
 
@@ -36,8 +39,11 @@ public class LinkService(AppDbContext db)
         entity.Title = req.Title;
         entity.Url = req.Url;
         entity.LinkType = (int)req.LinkType;
+        entity.LinkTypeId = req.LinkTypeId;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        if (entity.LinkTypeId.HasValue)
+            await db.Entry(entity).Reference(l => l.LinkTypeEntity).LoadAsync(ct);
         return entity.ToDto();
     }
 

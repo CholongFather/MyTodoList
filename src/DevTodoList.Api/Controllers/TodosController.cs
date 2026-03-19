@@ -59,6 +59,11 @@ public class TodosController(TodoService svc) : ControllerBase
     public async Task<IActionResult> UpdateTags(long id, [FromBody] UpdateTagsRequest req, CancellationToken ct)
         => await svc.UpdateTagsAsync(id, req.TagIds, ct) ? NoContent() : NotFound();
 
+    /// <summary>작업자 즉시 동기화</summary>
+    [HttpPatch("{id:long}/workers")]
+    public async Task<IActionResult> UpdateWorkers(long id, [FromBody] UpdateWorkersRequest req, CancellationToken ct)
+        => await svc.UpdateWorkersAsync(id, req.WorkerIds, ct) ? NoContent() : NotFound();
+
     /// <summary>담당 유형 즉시 변경</summary>
     [HttpPatch("{id:long}/assignee-type")]
     public async Task<IActionResult> UpdateAssigneeType(long id, [FromBody] UpdateAssigneeTypeRequest req, CancellationToken ct)

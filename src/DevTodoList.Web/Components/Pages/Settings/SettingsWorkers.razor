@@ -1,0 +1,111 @@
+@page "/settings/workers"
+
+@inject WorkerApiClient WorkerApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>작업자 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Primary" />
+    <MudText Typo="Typo.h5">작업자 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    @if (_loading) { <MudProgressLinear Indeterminate /> }
+    else
+    {
+        <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
+            <thead><tr><th style="width:60px;">순서</th><th style="width:40px;">색상</th><th>이름</th><th style="width:80px;"></th></tr></thead>
+            <tbody>
+                @for (var i = 0; i < _workers.Count; i++)
+                {
+                    var w = _workers[i];
+                    var idx = i;
+                    <tr>
+                        <td>
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(idx == 0)" OnClick="@(() => MoveAsync(idx, -1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(idx == _workers.Count - 1)" OnClick="@(() => MoveAsync(idx, 1))" />
+                        </td>
+                        <td><div style="width:24px;height:24px;border-radius:50%;background:@w.Color;"></div></td>
+                        <td>@w.Name</td>
+                        <td style="text-align:right;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(w))" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+            <MudTextField T="string" @bind-Value="_newName" Label="작업자 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
+            <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
+            <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private List<WorkerDto> _workers = [];
+    private bool _loading = true;
+    private string _newName = "";
+    private string _newColor = "";
+
+    private static readonly string[] _palette =
+    [
+        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
+        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800",
+        "#FF5722", "#795548", "#607D8B", "#F44336", "#1976D2"
+    ];
+    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newColor = RandomColor();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _workers = await WorkerApi.GetAllAsync(); } catch { } finally { _loading = false; }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        try
+        {
+            await WorkerApi.CreateAsync(new CreateWorkerRequest { Name = _newName, Color = _newColor });
+            _newName = "";
+            _newColor = RandomColor();
+            await LoadAsync();
+            Snackbar.Add("작업자가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task MoveAsync(int index, int direction)
+    {
+        var newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= _workers.Count) return;
+        (_workers[index], _workers[newIndex]) = (_workers[newIndex], _workers[index]);
+        try { await WorkerApi.ReorderAsync(_workers.Select(x => x.Id).ToList()); }
+        catch (Exception ex) { Snackbar.Add($"순서 변경 실패: {ex.Message}", Severity.Error); await LoadAsync(); }
+    }
+
+    private async Task DeleteAsync(WorkerDto w)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("작업자 삭제", $"'{w.Name}'을(를) 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+        try
+        {
+            await WorkerApi.DeleteAsync(w.Id);
+            await LoadAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

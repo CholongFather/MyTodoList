@@ -21,8 +21,8 @@ public class CaseService(AppDbContext db)
         var query = db.Cases
             .AsNoTracking()
             .Include(c => c.Project)
-            .Include(c => c.Notes)
-            .Include(c => c.Links)
+            .Include(c => c.Notes).ThenInclude(n => n.NoteTypeEntity)
+            .Include(c => c.Links).ThenInclude(l => l.LinkTypeEntity)
             .Include(c => c.EnvironmentEntity)
             .AsQueryable();
 
@@ -81,8 +81,8 @@ public class CaseService(AppDbContext db)
     {
         var entity = await db.Cases
             .Include(c => c.Project)
-            .Include(c => c.Notes)
-            .Include(c => c.Links)
+            .Include(c => c.Notes).ThenInclude(n => n.NoteTypeEntity)
+            .Include(c => c.Links).ThenInclude(l => l.LinkTypeEntity)
             .Include(c => c.EnvironmentEntity)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
         return entity?.ToDto();
@@ -205,10 +205,14 @@ public class CaseService(AppDbContext db)
             CaseId = caseId,
             Content = req.Content,
             NoteType = (int)req.NoteType,
+            NoteTypeId = req.NoteTypeId,
             Author = req.Author
         };
         db.CaseNotes.Add(entity);
         await db.SaveChangesAsync(ct);
+        // Navigation 로드
+        if (entity.NoteTypeId.HasValue)
+            await db.Entry(entity).Reference(n => n.NoteTypeEntity).LoadAsync(ct);
         return entity.ToDto();
     }
 
@@ -219,9 +223,12 @@ public class CaseService(AppDbContext db)
 
         entity.Content = req.Content;
         entity.NoteType = (int)req.NoteType;
+        entity.NoteTypeId = req.NoteTypeId;
         entity.Author = req.Author;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        if (entity.NoteTypeId.HasValue)
+            await db.Entry(entity).Reference(n => n.NoteTypeEntity).LoadAsync(ct);
         return entity.ToDto();
     }
 
@@ -243,10 +250,13 @@ public class CaseService(AppDbContext db)
             CaseId = caseId,
             Title = req.Title,
             Url = req.Url,
-            LinkType = (int)req.LinkType
+            LinkType = (int)req.LinkType,
+            LinkTypeId = req.LinkTypeId
         };
         db.CaseLinks.Add(entity);
         await db.SaveChangesAsync(ct);
+        if (entity.LinkTypeId.HasValue)
+            await db.Entry(entity).Reference(l => l.LinkTypeEntity).LoadAsync(ct);
         return entity.ToDto();
     }
 

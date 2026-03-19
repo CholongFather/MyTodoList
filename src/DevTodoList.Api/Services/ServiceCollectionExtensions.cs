@@ -23,6 +23,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<HolidayService>();
         services.AddScoped<AssigneeTypeService>();
         services.AddScoped<BusStationService>();
+        services.AddScoped<WorkerService>();
+        services.AddScoped<NoteTypeService>();
+        services.AddScoped<LinkTypeService>();
         return services;
     }
 }

@@ -6,6 +6,8 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject NoteTypeApiClient NoteTypeApi
+@inject LinkTypeApiClient LinkTypeApi
 
 <PageTitle>케이스 상세</PageTitle>
 
@@ -156,6 +158,9 @@ else
                 <MudStack Row Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
                     <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
                     <MudTextField @bind-Value="_newLink.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                    <MudSelect T="long?" @bind-Value="_newLink.LinkTypeId" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" Clearable>
+                        @foreach (var lt in _linkTypes) { <MudSelectItem T="long?" Value="lt.Id">@lt.Name</MudSelectItem> }
+                    </MudSelect>
                     <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
                                    OnClick="AddLinkAsync" Disabled="@string.IsNullOrWhiteSpace(_newLink.Url)" />
                 </MudStack>
@@ -194,10 +199,10 @@ else
                     <MudStack Spacing="2" Class="mt-2">
                         @foreach (var note in _case.Notes)
                         {
-                            <MudPaper Elevation="0" Class="pa-3 dtl-list-item" Style="@GetNoteStyle(note.NoteType)">
+                            <MudPaper Elevation="0" Class="pa-3 dtl-list-item" Style="@GetNoteStyleDb(note)">
                                 <MudStack Row AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
-                                    <MudIcon Icon="@NoteTypeIcon(note.NoteType)" Size="Size.Small" Style="@GetNoteColorStyle(note.NoteType)" />
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Style="@GetNoteColorStyle(note.NoteType)">@NoteTypeText(note.NoteType)</MudChip>
+                                    <MudIcon Icon="@(note.NoteTypeIcon ?? Icons.Material.Filled.Note)" Size="Size.Small" Style="@GetNoteColorStyleDb(note)" />
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Style="@GetNoteColorStyleDb(note)">@(note.NoteTypeName ?? "노트")</MudChip>
                                     @if (!string.IsNullOrEmpty(note.Author))
                                     {
                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@note.Author</MudText>
@@ -217,9 +222,9 @@ else
                 @* 노트 입력 *@
                 <MudPaper Elevation="0" Class="pa-3 mt-3" Style="border-radius:8px; background:var(--mud-palette-background);">
                     <MudStack Spacing="2">
-                        <MudSelect T="CaseNoteType" @bind-Value="_noteForm.NoteType" Label="유형" Variant="Variant.Outlined"
+                        <MudSelect T="long?" @bind-Value="_noteForm.NoteTypeId" Label="유형" Variant="Variant.Outlined"
                                    Margin="Margin.Dense" Style="max-width:160px;">
-                            @foreach (CaseNoteType nt in Enum.GetValues<CaseNoteType>()) { <MudSelectItem T="CaseNoteType" Value="nt">@nt.ToKorean()</MudSelectItem> }
+                            @foreach (var nt in _noteTypes) { <MudSelectItem T="long?" Value="nt.Id">@nt.Name</MudSelectItem> }
                         </MudSelect>
                         <MudTextField @bind-Value="_noteForm.Content" Label="내용 (마크다운)" Lines="4"
                                       Variant="Variant.Outlined" Placeholder="노트를 작성하세요..." />
@@ -305,6 +310,8 @@ else
     private long? _editingLinkId;
     private string _editLinkTitle = "";
     private string _editLinkUrl = "";
+    private List<NoteTypeDto> _noteTypes = [];
+    private List<LinkTypeDto> _linkTypes = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -314,6 +321,8 @@ else
             _case = await CaseApi.GetByIdAsync(Id);
             _projects = await ProjectApi.GetAllAsync();
             _environments = await EnvApi.GetAllAsync();
+            _noteTypes = await NoteTypeApi.GetAllAsync();
+            _linkTypes = await LinkTypeApi.GetAllAsync();
         }
         catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
         finally { _loading = false; }
@@ -419,6 +428,7 @@ else
         {
             Content = note.Content,
             NoteType = note.NoteType,
+            NoteTypeId = note.NoteTypeId,
             Author = note.Author
         };
     }
@@ -582,6 +592,12 @@ else
         => $"color:{NoteTypeColor(t)}";
 
     private static string NoteTypeText(CaseNoteType t) => t.ToKorean();
+
+    private static string GetNoteStyleDb(CaseNoteDto note)
+        => $"border-left:3px solid {note.NoteTypeColor ?? CaseNoteColors.GetColor(note.NoteType)};";
+
+    private static string GetNoteColorStyleDb(CaseNoteDto note)
+        => $"color:{note.NoteTypeColor ?? CaseNoteColors.GetColor(note.NoteType)}";
 
     static string LinkIcon(LinkType t) => t switch { LinkType.Jira => Icons.Material.Filled.BugReport, LinkType.Confluence => Icons.Material.Filled.MenuBook, LinkType.GitHub or LinkType.GitLab => Icons.Material.Filled.Code, _ => Icons.Material.Filled.Link };
     static Color LinkColor(LinkType t) => t switch { LinkType.Jira => Color.Info, LinkType.Confluence => Color.Warning, LinkType.GitHub or LinkType.GitLab => Color.Dark, _ => Color.Default };

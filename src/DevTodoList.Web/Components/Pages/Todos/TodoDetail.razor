@@ -8,6 +8,8 @@
 @inject TagApiClient TagApi
 @inject TeamApiClient TeamApi
 @inject AssigneeTypeApiClient AssigneeTypeApi
+@inject WorkerApiClient WorkerApi
+@inject LinkTypeApiClient LinkTypeApi
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -109,15 +111,17 @@ else
             }
             <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_startDate" Label="시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
             <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_endDate" Label="마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
-            @* 계획 vs 실제 일정 표시 *@
-            @if (_todo?.PlannedStartDate.HasValue == true || _todo?.PlannedEndDate.HasValue == true)
+            @* 계획일 *@
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedStartDate" Label="계획 시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedEndDate" Label="계획 마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            @* 실제 일정 표시 *@
+            @if (_todo?.ActualStartDate.HasValue == true || _todo?.IsDelayed == true)
             {
                 <MudItem xs="12">
                     <MudAlert Severity="Severity.Info" Dense Variant="Variant.Text" Class="mt-0">
-                        <b>계획:</b> @(_todo.PlannedStartDate?.ToString("yyyy-MM-dd") ?? "-") ~ @(_todo.PlannedEndDate?.ToString("yyyy-MM-dd") ?? "-")
                         @if (_todo.ActualStartDate.HasValue)
                         {
-                            <span> | <b>실제:</b> @_todo.ActualStartDate?.ToString("yyyy-MM-dd") ~ @(_todo.ActualEndDate?.ToString("yyyy-MM-dd") ?? "진행중")</span>
+                            <span><b>실제:</b> @_todo.ActualStartDate?.ToString("yyyy-MM-dd") ~ @(_todo.ActualEndDate?.ToString("yyyy-MM-dd") ?? "진행중")</span>
                         }
                         @if (_todo.IsDelayed)
                         {
@@ -143,6 +147,24 @@ else
                          Style="@(selected ? $"background:{tag.Color};color:white;cursor:pointer;" : $"border-color:{tag.Color};color:{tag.Color};cursor:pointer;opacity:0.6;")"
                          Variant="@(selected ? Variant.Filled : Variant.Outlined)"
                          OnClick="@(() => ToggleTag(tag.Id))">@tag.Name</MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+
+    @* 작업자 *@
+    <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0">
+        <div class="dtl-section-header">
+            <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Info" />
+            <MudText Typo="Typo.subtitle1">작업자</MudText>
+        </div>
+        <MudStack Row Spacing="1" Style="flex-wrap:wrap;">
+            @foreach (var worker in _allWorkers)
+            {
+                var selected = _selectedWorkerIds.Contains(worker.Id);
+                <MudChip T="string" Size="Size.Small"
+                         Style="@(selected ? $"background:{worker.Color};color:white;cursor:pointer;" : $"border-color:{worker.Color};color:{worker.Color};cursor:pointer;opacity:0.6;")"
+                         Variant="@(selected ? Variant.Filled : Variant.Outlined)"
+                         OnClick="@(() => ToggleWorker(worker.Id))">@worker.Name</MudChip>
             }
         </MudStack>
     </MudPaper>
@@ -191,9 +213,9 @@ else
         @foreach (var link in _todo.Links)
         {
             <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-                <MudIcon Icon="@LinkIcon(link.LinkType)" Size="Size.Small" Color="@LinkColor(link.LinkType)" />
+                <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Style="@(link.LinkTypeColor is not null ? $"color:{link.LinkTypeColor}" : "")" />
                 <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover">@(string.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title)</MudLink>
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@link.LinkType</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="@(link.LinkTypeColor is not null ? $"border-color:{link.LinkTypeColor};color:{link.LinkTypeColor}" : "")">@(link.LinkTypeName ?? link.LinkType.ToKorean())</MudChip>
                 <MudSpacer />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => DeleteLink(link)" />
             </MudStack>
@@ -201,8 +223,8 @@ else
         <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
             <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
             <MudTextField @bind-Value="_newLink.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
-            <MudSelect T="LinkType" @bind-Value="_newLink.LinkType" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter">
-                @foreach (LinkType lt in Enum.GetValues<LinkType>()) { <MudSelectItem T="LinkType" Value="lt">@lt.ToKorean()</MudSelectItem> }
+            <MudSelect T="long?" @bind-Value="_newLink.LinkTypeId" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter" Clearable>
+                @foreach (var lt in _allLinkTypes) { <MudSelectItem T="long?" Value="lt.Id">@lt.Name</MudSelectItem> }
             </MudSelect>
             <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="AddLink" Disabled="@string.IsNullOrWhiteSpace(_newLink.Url)" />
         </MudStack>
@@ -218,6 +240,9 @@ else
     private List<TeamDto> _teams = [];
     private List<WorkCategoryDto> _availableCategories = [];
     private List<long> _selectedTagIds = [];
+    private List<WorkerDto> _allWorkers = [];
+    private List<long> _selectedWorkerIds = [];
+    private List<LinkTypeDto> _allLinkTypes = [];
     private long? _formTeamId;
     private long? _formWorkCategoryId;
     private long? _formAssigneeTypeId;
@@ -229,6 +254,7 @@ else
     private string? _formExternalLabel;
     private bool _loading = true, _saving;
     private DateTime? _dueDate, _startDate, _endDate;
+    private DateTime? _plannedStartDate, _plannedEndDate;
     private string? _newCheck;
     private CreateLinkRequest _newLink = new();
 
@@ -242,12 +268,17 @@ else
                 ProjectApi.GetAllAsync().ContinueWith(t => _projects = t.Result),
                 TagApi.GetAllAsync().ContinueWith(t => _allTags = t.Result),
                 TeamApi.GetAllAsync().ContinueWith(t => _teams = t.Result),
-                AssigneeTypeApi.GetAllAsync().ContinueWith(t => _assigneeTypes = t.Result));
+                AssigneeTypeApi.GetAllAsync().ContinueWith(t => _assigneeTypes = t.Result),
+                WorkerApi.GetAllAsync().ContinueWith(t => _allWorkers = t.Result),
+                LinkTypeApi.GetAllAsync().ContinueWith(t => _allLinkTypes = t.Result));
             if (_todo is not null)
             {
                 _form = new() { Title = _todo.Title, Description = _todo.Description, Status = _todo.Status, Priority = _todo.Priority, ProjectId = _todo.ProjectId, TagIds = _todo.Tags.Select(t => t.Id).ToList() };
                 _dueDate = _todo.DueDate; _startDate = _todo.StartDate; _endDate = _todo.EndDate;
                 _selectedTagIds = _todo.Tags.Select(t => t.Id).ToList();
+                _selectedWorkerIds = _todo.Workers.Select(w => w.Id).ToList();
+                _plannedStartDate = _todo.PlannedStartDate;
+                _plannedEndDate = _todo.PlannedEndDate;
                 // 팀/작업분류/담당유형 폼 초기값
                 _formTeamId = _todo.TeamId;
                 _formWorkCategoryId = _todo.WorkCategoryId;
@@ -288,6 +319,9 @@ else
         try
         {
             _form.DueDate = _endDate; _form.StartDate = _startDate; _form.EndDate = _endDate; _form.TagIds = _selectedTagIds;
+            _form.WorkerIds = _selectedWorkerIds;
+            _form.PlannedStartDate = _plannedStartDate;
+            _form.PlannedEndDate = _plannedEndDate;
             // 팀/작업분류/담당유형 반영
             _form.TeamId = _formTeamId;
             _form.WorkCategoryId = _formWorkCategoryId;
@@ -345,6 +379,17 @@ else
             await TodoApi.UpdateTagsAsync(Id, _selectedTagIds);
         }
         catch (Exception ex) { Snackbar.Add($"태그 변경 실패: {ex.Message}", Severity.Error); }
+    }
+
+    /// <summary>작업자 토글 → 즉시 API 호출</summary>
+    private async Task ToggleWorker(long workerId)
+    {
+        if (!_selectedWorkerIds.Remove(workerId)) _selectedWorkerIds.Add(workerId);
+        try
+        {
+            await TodoApi.UpdateWorkersAsync(Id, _selectedWorkerIds);
+        }
+        catch (Exception ex) { Snackbar.Add($"작업자 변경 실패: {ex.Message}", Severity.Error); }
     }
 
     /// <summary>담당 유형 변경 → 즉시 API 호출</summary>

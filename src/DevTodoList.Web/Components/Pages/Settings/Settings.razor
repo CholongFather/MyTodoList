@@ -249,6 +249,23 @@
     }
 </MudPaper>
 
+@* === 추가 설정 바로가기 === *@
+<MudText Typo="Typo.h6" Class="mb-3 mt-6">추가 설정</MudText>
+<MudGrid Spacing="2" Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudButton Variant="Variant.Outlined" FullWidth Class="pa-3" Style="justify-content:flex-start;text-transform:none;"
+                   Href="/settings/workers" StartIcon="@Icons.Material.Filled.People" Color="Color.Primary">작업자 관리</MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudButton Variant="Variant.Outlined" FullWidth Class="pa-3" Style="justify-content:flex-start;text-transform:none;"
+                   Href="/settings/note-types" StartIcon="@Icons.Material.Filled.StickyNote2" Color="Color.Warning">노트 유형 관리</MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudButton Variant="Variant.Outlined" FullWidth Class="pa-3" Style="justify-content:flex-start;text-transform:none;"
+                   Href="/settings/link-types" StartIcon="@Icons.Material.Filled.Link" Color="Color.Info">링크 유형 관리</MudButton>
+    </MudItem>
+</MudGrid>
+
 @* === 공휴일/연차 관리 === *@
 <MudText Typo="Typo.h6" Class="mb-3 mt-6">공휴일 / 연차 관리</MudText>
 <MudPaper Class="dtl-section pa-4" Elevation="0">

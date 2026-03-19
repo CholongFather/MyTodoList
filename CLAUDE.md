@@ -47,7 +47,7 @@ IIS 물리 경로 = `$(OutputPath)` (bin/Release/net9.0/):
 주의사항:
 - **InProcess 호스팅**: w3wp.exe가 DLL 잠금. PreBuild에서 app_offline으로 해제 대기
 - Migration: `dotnet ef database update --project src/DevTodoList.Api -s src/DevTodoList.Api`
-- IIS DB에 Migration 적용: `dotnet ef database update --project src/DevTodoList.Api -s src/DevTodoList.Api --connection "Data Source=src/DevTodoList.Api/bin/Release/net9.0/devtodolist.db"`
+- IIS DB에 Migration 적용: `dotnet ef database update --project src/DevTodoList.Api -s src/DevTodoList.Api --connection "Data Source=C:/Repository/DevTodoList/src/DevTodoList.Api/bin/Release/net9.0/devtodolist.db"`
 
 ## DevTodoList API - 일정 자동 등록 가이드
 

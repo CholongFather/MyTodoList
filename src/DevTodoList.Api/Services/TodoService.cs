@@ -13,8 +13,9 @@ public class TodoService(AppDbContext db)
 {
     private IQueryable<TodoItemEntity> BaseQuery() => db.TodoItems
         .Include(x => x.TodoTags).ThenInclude(x => x.Tag)
+        .Include(x => x.TodoWorkers).ThenInclude(x => x.Worker)
         .Include(x => x.CheckItems)
-        .Include(x => x.Links)
+        .Include(x => x.Links).ThenInclude(x => x.LinkTypeEntity)
         .Include(x => x.Project)
         .Include(x => x.Team)
         .Include(x => x.WorkCategory)
@@ -162,12 +163,20 @@ public class TodoService(AppDbContext db)
             await db.SaveChangesAsync(ct);
         }
 
+        // 작업자 연결
+        if (req.WorkerIds.Count > 0)
+        {
+            foreach (var workerId in req.WorkerIds)
+                db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = entity.Id, WorkerId = workerId });
+            await db.SaveChangesAsync(ct);
+        }
+
         return (await GetByIdAsync(entity.Id, ct))!;
     }
 
     public async Task<TodoItemDto?> UpdateAsync(long id, UpdateTodoRequest req, CancellationToken ct = default)
     {
-        var entity = await db.TodoItems.Include(x => x.TodoTags).FirstOrDefaultAsync(x => x.Id == id, ct);
+        var entity = await db.TodoItems.Include(x => x.TodoTags).Include(x => x.TodoWorkers).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return null;
 
         var oldStatus = entity.Status;
@@ -200,6 +209,9 @@ public class TodoService(AppDbContext db)
         }
         entity.IsExternal = req.IsExternal;
         entity.ExternalLabel = req.ExternalLabel;
+        // 계획일 수정
+        if (req.PlannedStartDate.HasValue) entity.PlannedStartDate = req.PlannedStartDate;
+        if (req.PlannedEndDate.HasValue) entity.PlannedEndDate = req.PlannedEndDate;
         entity.UpdatedAt = DateTime.UtcNow;
 
         // 실제 시작일 자동 설정: → InProgress 전환 시
@@ -222,6 +234,11 @@ public class TodoService(AppDbContext db)
         db.TodoTags.RemoveRange(entity.TodoTags);
         foreach (var tagId in req.TagIds)
             db.TodoTags.Add(new TodoTagEntity { TodoItemId = id, TagId = tagId });
+
+        // 작업자 갱신
+        db.TodoWorkers.RemoveRange(entity.TodoWorkers);
+        foreach (var workerId in req.WorkerIds)
+            db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = id, WorkerId = workerId });
 
         await db.SaveChangesAsync(ct);
         return await GetByIdAsync(id, ct);
@@ -264,6 +281,19 @@ public class TodoService(AppDbContext db)
         db.TodoTags.RemoveRange(entity.TodoTags);
         foreach (var tagId in tagIds)
             db.TodoTags.Add(new TodoTagEntity { TodoItemId = id, TagId = tagId });
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>작업자 즉시 동기화</summary>
+    public async Task<bool> UpdateWorkersAsync(long id, List<long> workerIds, CancellationToken ct = default)
+    {
+        var entity = await db.TodoItems.Include(x => x.TodoWorkers).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return false;
+        db.TodoWorkers.RemoveRange(entity.TodoWorkers);
+        foreach (var workerId in workerIds)
+            db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = id, WorkerId = workerId });
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return true;
@@ -335,6 +365,14 @@ public class TodoService(AppDbContext db)
         {
             foreach (var tag in source.TodoTags)
                 db.TodoTags.Add(new TodoTagEntity { TodoItemId = copy.Id, TagId = tag.TagId });
+            await db.SaveChangesAsync(ct);
+        }
+
+        // 작업자 복제
+        if (source.TodoWorkers?.Count > 0)
+        {
+            foreach (var w in source.TodoWorkers)
+                db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = copy.Id, WorkerId = w.WorkerId });
             await db.SaveChangesAsync(ct);
         }
 
