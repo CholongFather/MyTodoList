@@ -53,11 +53,15 @@ public class AssigneeTypeService(AppDbContext db)
 
     public async Task ReorderAsync(List<long> orderedIds, CancellationToken ct = default)
     {
+        if (orderedIds.Count == 0) return;
+        var entities = await db.AssigneeTypes.Where(e => orderedIds.Contains(e.Id)).ToListAsync(ct);
+        var map = entities.ToDictionary(x => x.Id);
         for (var i = 0; i < orderedIds.Count; i++)
         {
-            await db.AssigneeTypes.Where(e => e.Id == orderedIds[i])
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.SortOrder, i), ct);
+            if (map.TryGetValue(orderedIds[i], out var entity))
+                entity.SortOrder = i;
         }
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<bool> DeleteAsync(long id, CancellationToken ct = default)

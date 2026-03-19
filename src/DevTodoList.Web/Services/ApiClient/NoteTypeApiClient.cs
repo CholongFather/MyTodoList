@@ -14,20 +14,20 @@ public class NoteTypeApiClient(IHttpClientFactory factory)
     public async Task<NoteTypeDto?> CreateAsync(CreateNoteTypeRequest req)
     {
         var res = await Http.PostAsJsonAsync("api/note-types", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<NoteTypeDto>();
     }
 
     public async Task<NoteTypeDto?> UpdateAsync(long id, CreateNoteTypeRequest req)
     {
         var res = await Http.PutAsJsonAsync($"api/note-types/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<NoteTypeDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"api/note-types/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 }

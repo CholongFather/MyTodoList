@@ -52,96 +52,96 @@ public class TodoApiClient(IHttpClientFactory factory)
     public async Task<TodoItemDto?> CreateAsync(CreateTodoRequest req)
     {
         var res = await Http.PostAsJsonAsync("api/todos", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TodoItemDto>();
     }
 
     public async Task<TodoItemDto?> UpdateAsync(long id, UpdateTodoRequest req)
     {
         var res = await Http.PutAsJsonAsync($"api/todos/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TodoItemDto>();
     }
 
     public async Task UpdateStatusAsync(long id, TodoStatus status)
     {
         var res = await Http.PatchAsJsonAsync($"api/todos/{id}/status", new UpdateStatusRequest { Status = status });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     /// <summary>태그 즉시 동기화</summary>
     public async Task UpdateTagsAsync(long id, List<long> tagIds)
     {
         var res = await Http.PatchAsJsonAsync($"api/todos/{id}/tags", new UpdateTagsRequest { TagIds = tagIds });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     /// <summary>작업자 즉시 동기화</summary>
     public async Task UpdateWorkersAsync(long id, List<long> workerIds)
     {
         var res = await Http.PatchAsJsonAsync($"api/todos/{id}/workers", new UpdateWorkersRequest { WorkerIds = workerIds });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     /// <summary>담당 유형 즉시 변경</summary>
     public async Task UpdateAssigneeTypeAsync(long id, long? assigneeTypeId)
     {
         var res = await Http.PatchAsJsonAsync($"api/todos/{id}/assignee-type", new UpdateAssigneeTypeRequest { AssigneeTypeId = assigneeTypeId });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     /// <summary>순서 변경</summary>
     public async Task ReorderAsync(List<long> orderedIds)
     {
         var res = await Http.PutAsJsonAsync("api/todos/reorder", new ReorderRequest { OrderedIds = orderedIds });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     public async Task<TodoItemDto?> DuplicateAsync(long id)
     {
         var res = await Http.PostAsync($"api/todos/{id}/duplicate", null);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TodoItemDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"api/todos/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     // 체크리스트
     public async Task<TodoCheckItemDto?> CreateCheckItemAsync(long todoId, string title)
     {
         var res = await Http.PostAsJsonAsync($"api/todos/{todoId}/checkitems", new CreateCheckItemRequest { Title = title });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TodoCheckItemDto>();
     }
 
     public async Task ToggleCheckItemAsync(long todoId, long checkItemId)
     {
         var res = await Http.PatchAsync($"api/todos/{todoId}/checkitems/{checkItemId}/toggle", null);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     public async Task DeleteCheckItemAsync(long todoId, long checkItemId)
     {
         var res = await Http.DeleteAsync($"api/todos/{todoId}/checkitems/{checkItemId}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     // 링크
     public async Task<TodoLinkDto?> CreateLinkAsync(long todoId, CreateLinkRequest req)
     {
         var res = await Http.PostAsJsonAsync($"api/todos/{todoId}/links", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TodoLinkDto>();
     }
 
     public async Task DeleteLinkAsync(long todoId, long linkId)
     {
         var res = await Http.DeleteAsync($"api/todos/{todoId}/links/{linkId}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     /// <summary>CSV 내보내기</summary>

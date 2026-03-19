@@ -78,13 +78,7 @@
     private long? _editingId;
     private string _editName = "", _editColor = "";
 
-    private static readonly string[] _palette =
-    [
-        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
-        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800",
-        "#FF5722", "#795548", "#607D8B", "#F44336", "#1976D2"
-    ];
-    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+    private static string RandomColor() => ColorPalettes.Random();
 
     protected override async Task OnInitializedAsync()
     {
@@ -132,7 +126,8 @@
         try
         {
             await WorkerApi.UpdateAsync(w.Id, new CreateWorkerRequest { Name = w.Name, Color = w.Color, IsMe = val });
-            w.IsMe = val;
+            // 서버에서 단 한 명만 IsMe 유지 → 목록 갱신
+            await LoadAsync();
             Snackbar.Add(val ? $"'{w.Name}'이(가) 나로 설정됨" : $"'{w.Name}' 나 해제", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }

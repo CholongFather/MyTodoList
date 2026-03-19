@@ -37,6 +37,12 @@ public class WorkerService(AppDbContext db)
         if (entity is null) return null;
         entity.Name = req.Name;
         entity.Color = req.Color;
+        // IsMe는 단 한 명만 가능 → 다른 작업자 해제
+        if (req.IsMe && !entity.IsMe)
+        {
+            var others = await db.Workers.Where(w => w.IsMe && w.Id != id).ToListAsync(ct);
+            foreach (var o in others) o.IsMe = false;
+        }
         entity.IsMe = req.IsMe;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);

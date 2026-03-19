@@ -21,15 +21,14 @@ public class TodoService(AppDbContext db)
         .Include(x => x.WorkCategory)
         .Include(x => x.AssigneeTypeEntity);
 
-    public async Task<List<TodoItemDto>> GetFilteredAsync(
+    /// <summary>공통 필터 쿼리 빌더</summary>
+    private IQueryable<TodoItemEntity> BuildFilteredQuery(
         long? projectId, int? status, string? tagIds,
         int? priority, DateTime? fromDate, DateTime? toDate,
         string? search, long? teamId, int? assigneeType, long? workCategoryId,
-        long? assigneeTypeId = null,
-        CancellationToken ct = default)
+        long? assigneeTypeId)
     {
         var query = BaseQuery();
-
         if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
         if (status.HasValue) query = query.Where(x => x.Status == status);
         if (priority.HasValue) query = query.Where(x => x.Priority == priority);
@@ -48,12 +47,22 @@ public class TodoService(AppDbContext db)
                 .Where(x => x.HasValue).Select(x => x!.Value).ToList();
             query = query.Where(x => x.TodoTags.Any(t => ids.Contains(t.TagId)));
         }
+        return query;
+    }
 
-        var entities = await query
-            .OrderBy(x => x.SortOrder)
-            .ThenByDescending(x => x.CreatedAt)
-            .ToListAsync(ct);
+    /// <summary>기본 정렬: 상태 asc → 마감일 desc</summary>
+    private static IOrderedQueryable<TodoItemEntity> ApplyDefaultOrder(IQueryable<TodoItemEntity> query)
+        => query.OrderBy(x => x.Status).ThenByDescending(x => x.EndDate ?? x.DueDate);
 
+    public async Task<List<TodoItemDto>> GetFilteredAsync(
+        long? projectId, int? status, string? tagIds,
+        int? priority, DateTime? fromDate, DateTime? toDate,
+        string? search, long? teamId, int? assigneeType, long? workCategoryId,
+        long? assigneeTypeId = null,
+        CancellationToken ct = default)
+    {
+        var query = BuildFilteredQuery(projectId, status, tagIds, priority, fromDate, toDate, search, teamId, assigneeType, workCategoryId, assigneeTypeId);
+        var entities = await ApplyDefaultOrder(query).ToListAsync(ct);
         return entities.ToDtoList();
     }
 
@@ -66,32 +75,9 @@ public class TodoService(AppDbContext db)
         long? assigneeTypeId = null,
         CancellationToken ct = default)
     {
-        var query = BaseQuery();
-
-        if (projectId.HasValue) query = query.Where(x => x.ProjectId == projectId);
-        if (status.HasValue) query = query.Where(x => x.Status == status);
-        if (priority.HasValue) query = query.Where(x => x.Priority == priority);
-        if (fromDate.HasValue) query = query.Where(x => x.DueDate >= fromDate);
-        if (toDate.HasValue) query = query.Where(x => x.DueDate <= toDate);
-        if (!string.IsNullOrEmpty(search))
-            query = query.Where(x => x.Title.Contains(search) || (x.Description != null && x.Description.Contains(search)));
-        if (teamId.HasValue) query = query.Where(x => x.TeamId == teamId);
-        if (assigneeType.HasValue) query = query.Where(x => x.AssigneeType == assigneeType);
-        if (workCategoryId.HasValue) query = query.Where(x => x.WorkCategoryId == workCategoryId);
-        if (assigneeTypeId.HasValue) query = query.Where(x => x.AssigneeTypeId == assigneeTypeId);
-        if (!string.IsNullOrEmpty(tagIds))
-        {
-            var ids = tagIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => long.TryParse(x.Trim(), out var v) ? v : (long?)null)
-                .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-            query = query.Where(x => x.TodoTags.Any(t => ids.Contains(t.TagId)));
-        }
-
+        var query = BuildFilteredQuery(projectId, status, tagIds, priority, fromDate, toDate, search, teamId, assigneeType, workCategoryId, assigneeTypeId);
         var totalCount = await query.CountAsync(ct);
-
-        var entities = await query
-            .OrderBy(x => x.SortOrder)
-            .ThenByDescending(x => x.CreatedAt)
+        var entities = await ApplyDefaultOrder(query)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -113,6 +99,8 @@ public class TodoService(AppDbContext db)
 
     public async Task<TodoItemDto> CreateAsync(CreateTodoRequest req, CancellationToken ct = default)
     {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
         var maxOrder = await db.TodoItems
             .Where(x => x.ProjectId == req.ProjectId)
             .MaxAsync(x => (int?)x.SortOrder, ct) ?? 0;
@@ -120,8 +108,9 @@ public class TodoService(AppDbContext db)
         // 외부 일정이면 무조건 타인 작업 강제
         if (req.IsExternal)
         {
-            var othersAt = await db.AssigneeTypes.FirstOrDefaultAsync(x => !x.IsMine, ct);
-            if (othersAt != null) req.AssigneeTypeId = othersAt.Id;
+            var othersAt = await db.AssigneeTypes.FirstOrDefaultAsync(x => !x.IsMine, ct)
+                ?? throw new InvalidOperationException("타인 작업(Others) 담당 유형이 존재하지 않습니다.");
+            req.AssigneeTypeId = othersAt.Id;
         }
 
         // AssigneeTypeId → 동작 유형 자동 결정
@@ -150,26 +139,14 @@ public class TodoService(AppDbContext db)
             ExternalLabel = req.ExternalLabel,
             PlannedStartDate = req.StartDate,
             PlannedEndDate = req.EndDate ?? req.DueDate,
+            // 태그/작업자를 네비게이션 프로퍼티로 설정 → 단일 SaveChanges
+            TodoTags = req.TagIds.Select(tagId => new TodoTagEntity { TagId = tagId }).ToList(),
+            TodoWorkers = req.WorkerIds.Select(wId => new TodoWorkerEntity { WorkerId = wId }).ToList(),
         };
 
         db.TodoItems.Add(entity);
         await db.SaveChangesAsync(ct);
-
-        // 태그 연결
-        if (req.TagIds.Count > 0)
-        {
-            foreach (var tagId in req.TagIds)
-                db.TodoTags.Add(new TodoTagEntity { TodoItemId = entity.Id, TagId = tagId });
-            await db.SaveChangesAsync(ct);
-        }
-
-        // 작업자 연결
-        if (req.WorkerIds.Count > 0)
-        {
-            foreach (var workerId in req.WorkerIds)
-                db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = entity.Id, WorkerId = workerId });
-            await db.SaveChangesAsync(ct);
-        }
+        await tx.CommitAsync(ct);
 
         return (await GetByIdAsync(entity.Id, ct))!;
     }
@@ -193,8 +170,9 @@ public class TodoService(AppDbContext db)
         // 외부 일정이면 무조건 타인 작업 강제
         if (req.IsExternal)
         {
-            var othersAt = await db.AssigneeTypes.FirstOrDefaultAsync(x => !x.IsMine, ct);
-            if (othersAt != null) req.AssigneeTypeId = othersAt.Id;
+            var othersAt = await db.AssigneeTypes.FirstOrDefaultAsync(x => !x.IsMine, ct)
+                ?? throw new InvalidOperationException("타인 작업(Others) 담당 유형이 존재하지 않습니다.");
+            req.AssigneeTypeId = othersAt.Id;
         }
         entity.AssigneeTypeId = req.AssigneeTypeId;
         // AssigneeTypeId → 동작 유형 자동 결정
@@ -336,7 +314,7 @@ public class TodoService(AppDbContext db)
         return true;
     }
 
-    /// <summary>할일 복제 (태그 포함, 상태는 Todo로 초기화)</summary>
+    /// <summary>할일 복제 (태그/작업자/체크리스트 포함, 상태는 Todo로 초기화)</summary>
     public async Task<TodoItemDto?> DuplicateAsync(long id, CancellationToken ct = default)
     {
         var source = await BaseQuery().FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -364,33 +342,13 @@ public class TodoService(AppDbContext db)
             ExternalLabel = source.ExternalLabel,
             PlannedStartDate = source.StartDate,
             PlannedEndDate = source.EndDate ?? source.DueDate,
+            // 네비게이션 프로퍼티로 한 번에 저장
+            TodoTags = source.TodoTags?.Select(t => new TodoTagEntity { TagId = t.TagId }).ToList() ?? [],
+            TodoWorkers = source.TodoWorkers?.Select(w => new TodoWorkerEntity { WorkerId = w.WorkerId }).ToList() ?? [],
+            CheckItems = source.CheckItems?.Select(c => new TodoCheckItemEntity { Title = c.Title, SortOrder = c.SortOrder }).ToList() ?? [],
         };
         db.TodoItems.Add(copy);
         await db.SaveChangesAsync(ct);
-
-        // 태그 복제
-        if (source.TodoTags?.Count > 0)
-        {
-            foreach (var tag in source.TodoTags)
-                db.TodoTags.Add(new TodoTagEntity { TodoItemId = copy.Id, TagId = tag.TagId });
-            await db.SaveChangesAsync(ct);
-        }
-
-        // 작업자 복제
-        if (source.TodoWorkers?.Count > 0)
-        {
-            foreach (var w in source.TodoWorkers)
-                db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = copy.Id, WorkerId = w.WorkerId });
-            await db.SaveChangesAsync(ct);
-        }
-
-        // 체크리스트 복제
-        if (source.CheckItems?.Count > 0)
-        {
-            foreach (var check in source.CheckItems)
-                db.TodoCheckItems.Add(new TodoCheckItemEntity { Title = check.Title, TodoItemId = copy.Id, SortOrder = check.SortOrder });
-            await db.SaveChangesAsync(ct);
-        }
 
         return (await GetByIdAsync(copy.Id, ct))!;
     }

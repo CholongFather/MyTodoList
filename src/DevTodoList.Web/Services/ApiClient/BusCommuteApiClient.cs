@@ -20,27 +20,27 @@ public class BusCommuteApiClient(IHttpClientFactory factory)
     public async Task<BusCommuteSettingDto> CreateAsync(CreateBusCommuteSettingRequest req)
     {
         var res = await Http.PostAsJsonAsync(Base, req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return (await res.Content.ReadFromJsonAsync<BusCommuteSettingDto>())!;
     }
 
     public async Task<BusCommuteSettingDto> UpdateAsync(long id, CreateBusCommuteSettingRequest req)
     {
         var res = await Http.PutAsJsonAsync($"{Base}/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return (await res.Content.ReadFromJsonAsync<BusCommuteSettingDto>())!;
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"{Base}/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     public async Task ToggleAsync(long id)
     {
         var res = await Http.PutAsync($"{Base}/{id}/toggle", null);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     public async Task<bool> TestNotificationAsync(long settingId)

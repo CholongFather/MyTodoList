@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs.Requests;
@@ -5,6 +6,8 @@ namespace DevTodoList.Shared.DTOs.Requests;
 /// <summary>케이스 노트 생성/수정 요청</summary>
 public class CreateCaseNoteRequest
 {
+    [Required]
+    [StringLength(2000)]
     public string Content { get; set; } = string.Empty;
     public CaseNoteType NoteType { get; set; }
     public long? NoteTypeId { get; set; }

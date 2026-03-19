@@ -242,7 +242,7 @@ else
     private bool _formIsExternal;
     private string? _formExternalLabel;
     private bool _loading = true, _saving;
-    private DateTime? _dueDate, _startDate, _endDate;
+    private DateTime? _startDate, _endDate;
     private DateTime? _plannedStartDate, _plannedEndDate;
     private string? _newCheck;
     private CreateLinkRequest _newLink = new();
@@ -262,7 +262,7 @@ else
             if (_todo is not null)
             {
                 _form = new() { Title = _todo.Title, Description = _todo.Description, Status = _todo.Status, Priority = _todo.Priority, ProjectId = _todo.ProjectId, TagIds = _todo.Tags.Select(t => t.Id).ToList() };
-                _dueDate = _todo.DueDate; _startDate = _todo.StartDate; _endDate = _todo.EndDate;
+                _startDate = _todo.StartDate; _endDate = _todo.EndDate;
                 _selectedTagIds = _todo.Tags.Select(t => t.Id).ToList();
                 _selectedWorkerIds = _todo.Workers.Select(w => w.Id).ToList();
                 _plannedStartDate = _todo.PlannedStartDate;
@@ -279,23 +279,25 @@ else
         finally { _loading = false; }
     }
 
+    /// <summary>폼 → 요청 객체에 현재 UI 값 반영</summary>
+    private void SyncFormValues()
+    {
+        _form.DueDate = _endDate; _form.StartDate = _startDate; _form.EndDate = _endDate; _form.TagIds = _selectedTagIds;
+        _form.WorkerIds = _selectedWorkerIds;
+        _form.PlannedStartDate = _plannedStartDate;
+        _form.PlannedEndDate = _plannedEndDate;
+        _form.TeamId = _formTeamId;
+        _form.WorkCategoryId = _formWorkCategoryId;
+        _form.IsExternal = _formIsExternal;
+        _form.ExternalLabel = _formExternalLabel;
+    }
+
     /// <summary>자동 저장 (모든 필드 변경 시 즉시 API 호출)</summary>
     private async Task AutoSaveAsync()
     {
         if (string.IsNullOrWhiteSpace(_form.Title) || _saving) return;
         _saving = true;
-        try
-        {
-            _form.DueDate = _endDate; _form.StartDate = _startDate; _form.EndDate = _endDate; _form.TagIds = _selectedTagIds;
-            _form.WorkerIds = _selectedWorkerIds;
-            _form.PlannedStartDate = _plannedStartDate;
-            _form.PlannedEndDate = _plannedEndDate;
-            _form.TeamId = _formTeamId;
-            _form.WorkCategoryId = _formWorkCategoryId;
-            _form.IsExternal = _formIsExternal;
-            _form.ExternalLabel = _formExternalLabel;
-            _todo = await TodoApi.UpdateAsync(Id, _form);
-        }
+        try { SyncFormValues(); _todo = await TodoApi.UpdateAsync(Id, _form); }
         catch (Exception ex) { Snackbar.Add($"자동 저장 실패: {ex.Message}", Severity.Error); }
         finally { _saving = false; StateHasChanged(); }
     }
@@ -305,19 +307,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_form.Title)) { Snackbar.Add("제목을 입력하세요.", Severity.Warning); return; }
         _saving = true;
-        try
-        {
-            _form.DueDate = _endDate; _form.StartDate = _startDate; _form.EndDate = _endDate; _form.TagIds = _selectedTagIds;
-            _form.WorkerIds = _selectedWorkerIds;
-            _form.PlannedStartDate = _plannedStartDate;
-            _form.PlannedEndDate = _plannedEndDate;
-            _form.TeamId = _formTeamId;
-            _form.WorkCategoryId = _formWorkCategoryId;
-            _form.IsExternal = _formIsExternal;
-            _form.ExternalLabel = _formExternalLabel;
-            _todo = await TodoApi.UpdateAsync(Id, _form);
-            Snackbar.Add("저장되었습니다.", Severity.Success);
-        }
+        try { SyncFormValues(); _todo = await TodoApi.UpdateAsync(Id, _form); Snackbar.Add("저장되었습니다.", Severity.Success); }
         catch (Exception ex) { Snackbar.Add($"저장 실패: {ex.Message}", Severity.Error); }
         finally { _saving = false; }
     }
@@ -456,9 +446,10 @@ else
     private void ScheduleAutoSave()
     {
         _autoSaveTimer?.Dispose();
-        _autoSaveTimer = new System.Threading.Timer(_ =>
+        _autoSaveTimer = new System.Threading.Timer(async _ =>
         {
-            _ = InvokeAsync(AutoSaveAsync);
+            try { await InvokeAsync(AutoSaveAsync); }
+            catch (ObjectDisposedException) { /* 컴포넌트 Disposed 시 무시 */ }
         }, null, 1000, Timeout.Infinite);
     }
 
@@ -466,8 +457,6 @@ else
 
     static string SL(TodoStatus s) => s.ToKorean();
     static string PL(TodoPriority p) => p.ToKorean();
-    static string LinkIcon(LinkType t) => t switch { LinkType.Jira => Icons.Material.Filled.BugReport, LinkType.Confluence => Icons.Material.Filled.MenuBook, LinkType.GitHub or LinkType.GitLab => Icons.Material.Filled.Code, _ => Icons.Material.Filled.Link };
-    static Color LinkColor(LinkType t) => t switch { LinkType.Jira => Color.Info, LinkType.Confluence => Color.Warning, LinkType.GitHub or LinkType.GitLab => Color.Dark, _ => Color.Default };
     static Color OthersColor(OthersStatusHelper.ComputedStatus cs) => cs switch
     {
         OthersStatusHelper.ComputedStatus.InProgress => Color.Info,

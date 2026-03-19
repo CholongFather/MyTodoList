@@ -17,21 +17,21 @@ public class ProjectApiClient(IHttpClientFactory factory)
     public async Task<ProjectDto?> CreateAsync(CreateProjectRequest req)
     {
         var res = await Http.PostAsJsonAsync("api/projects", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<ProjectDto>();
     }
 
     public async Task<ProjectDto?> UpdateAsync(long id, CreateProjectRequest req)
     {
         var res = await Http.PutAsJsonAsync($"api/projects/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<ProjectDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"api/projects/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     // === 메타 (URL/버전/비밀번호) ===
@@ -39,20 +39,20 @@ public class ProjectApiClient(IHttpClientFactory factory)
     public async Task<ProjectMetaDto?> CreateMetaAsync(long projectId, CreateProjectMetaRequest req)
     {
         var res = await Http.PostAsJsonAsync($"api/projects/{projectId}/metas", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<ProjectMetaDto>();
     }
 
     public async Task<ProjectMetaDto?> UpdateMetaAsync(long metaId, CreateProjectMetaRequest req)
     {
         var res = await Http.PutAsJsonAsync($"api/projects/metas/{metaId}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<ProjectMetaDto>();
     }
 
     public async Task DeleteMetaAsync(long metaId)
     {
         var res = await Http.DeleteAsync($"api/projects/metas/{metaId}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 }

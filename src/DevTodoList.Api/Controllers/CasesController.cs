@@ -1,4 +1,5 @@
 using DevTodoList.Api.Services;
+using DevTodoList.Shared.Constants;
 using DevTodoList.Shared.DTOs.Requests;
 using DevTodoList.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -26,8 +27,8 @@ public class CasesController(CaseService svc) : ControllerBase
         [FromQuery] long? environmentId,
         [FromQuery] long? projectId,
         [FromQuery] string? search,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] int page = PaginationDefaults.Page,
+        [FromQuery] int pageSize = PaginationDefaults.PageSize,
         CancellationToken ct = default)
         => Ok(await svc.GetPagedAsync(status, category, environmentId, projectId, search, page, pageSize, ct));
 

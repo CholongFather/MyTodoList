@@ -18,20 +18,20 @@ public class HolidayApiClient(IHttpClientFactory factory)
     public async Task<HolidayDto?> CreateAsync(CreateHolidayRequest req)
     {
         var resp = await Http.PostAsJsonAsync("api/holidays", req);
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<HolidayDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var resp = await Http.DeleteAsync($"api/holidays/{id}");
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
     }
 
     public async Task<int> SeedKoreanAsync(int year)
     {
         var resp = await Http.PostAsync($"api/holidays/seed/{year}", null);
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
         var result = await resp.Content.ReadFromJsonAsync<SeedResult>();
         return result?.Added ?? 0;
     }

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Constants;
 
 namespace DevTodoList.Shared.DTOs.Requests;
@@ -5,9 +6,15 @@ namespace DevTodoList.Shared.DTOs.Requests;
 /// <summary>버스 출퇴근 설정 생성/수정 요청</summary>
 public class CreateBusCommuteSettingRequest
 {
+    [Required]
+    [StringLength(200)]
     public string Name { get; set; } = string.Empty;
     public int CommuteType { get; set; }
+    [Required]
+    [StringLength(200)]
     public string BusStopName { get; set; } = string.Empty;
+    [Required]
+    [StringLength(200)]
     public string BusRouteNumber { get; set; } = string.Empty;
     public string? GbisStationId { get; set; }
     public string? GbisRouteId { get; set; }

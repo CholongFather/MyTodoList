@@ -23,7 +23,15 @@
 
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-6 px-4 px-md-6">
-            @Body
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent>
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="my-4">
+                        예기치 않은 오류가 발생했습니다.
+                        <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="ResetError" Class="ml-2">다시 시도</MudButton>
+                    </MudAlert>
+                </ErrorContent>
+            </ErrorBoundary>
         </MudContainer>
     </MudMainContent>
 </MudLayout>
@@ -119,5 +127,8 @@
         }
     };
 
+    private ErrorBoundary? _errorBoundary;
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ResetError() => _errorBoundary?.Recover();
 }

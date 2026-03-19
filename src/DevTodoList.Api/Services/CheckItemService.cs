@@ -64,10 +64,14 @@ public class CheckItemService(AppDbContext db)
 
     public async Task ReorderAsync(long todoId, ReorderRequest req, CancellationToken ct = default)
     {
+        if (req.OrderedIds.Count == 0) return;
+        var entities = await db.TodoCheckItems
+            .Where(c => c.TodoItemId == todoId && req.OrderedIds.Contains(c.Id))
+            .ToListAsync(ct);
+        var map = entities.ToDictionary(x => x.Id);
         for (int i = 0; i < req.OrderedIds.Count; i++)
         {
-            var entity = await db.TodoCheckItems.FindAsync([req.OrderedIds[i]], ct);
-            if (entity is not null && entity.TodoItemId == todoId)
+            if (map.TryGetValue(req.OrderedIds[i], out var entity))
             {
                 entity.SortOrder = i;
                 entity.UpdatedAt = DateTime.UtcNow;

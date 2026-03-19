@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs.Requests;
@@ -5,6 +6,8 @@ namespace DevTodoList.Shared.DTOs.Requests;
 /// <summary>케이스 생성/수정 요청</summary>
 public class CreateCaseRequest
 {
+    [Required]
+    [StringLength(500)]
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public CaseCategory CaseCategory { get; set; }

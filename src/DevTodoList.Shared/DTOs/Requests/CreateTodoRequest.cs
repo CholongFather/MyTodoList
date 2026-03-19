@@ -1,9 +1,12 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs.Requests;
 
 public class CreateTodoRequest
 {
+    [Required]
+    [StringLength(500)]
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public TodoPriority Priority { get; set; } = TodoPriority.Normal;

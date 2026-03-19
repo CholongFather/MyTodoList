@@ -67,10 +67,12 @@ public class ProjectService(AppDbContext db)
 
     public async Task ReorderAsync(ReorderRequest req, CancellationToken ct = default)
     {
+        if (req.OrderedIds.Count == 0) return;
+        var entities = await db.Projects.Where(x => req.OrderedIds.Contains(x.Id)).ToListAsync(ct);
+        var map = entities.ToDictionary(x => x.Id);
         for (int i = 0; i < req.OrderedIds.Count; i++)
         {
-            var entity = await db.Projects.FindAsync([req.OrderedIds[i]], ct);
-            if (entity is not null)
+            if (map.TryGetValue(req.OrderedIds[i], out var entity))
             {
                 entity.SortOrder = i;
                 entity.UpdatedAt = DateTime.UtcNow;

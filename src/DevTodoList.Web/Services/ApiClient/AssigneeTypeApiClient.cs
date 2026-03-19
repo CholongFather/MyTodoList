@@ -15,26 +15,26 @@ public class AssigneeTypeApiClient(IHttpClientFactory factory)
     public async Task<AssigneeTypeDto?> CreateAsync(CreateAssigneeTypeRequest req)
     {
         var resp = await Http.PostAsJsonAsync("api/assignee-types", req);
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<AssigneeTypeDto>();
     }
 
     public async Task<AssigneeTypeDto?> UpdateAsync(long id, CreateAssigneeTypeRequest req)
     {
         var resp = await Http.PutAsJsonAsync($"api/assignee-types/{id}", req);
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<AssigneeTypeDto>();
     }
 
     public async Task ReorderAsync(List<long> orderedIds)
     {
         var resp = await Http.PutAsJsonAsync("api/assignee-types/reorder", new ReorderRequest { OrderedIds = orderedIds });
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
     }
 
     public async Task DeleteAsync(long id)
     {
         var resp = await Http.DeleteAsync($"api/assignee-types/{id}");
-        resp.EnsureSuccessStatusCode();
+        await resp.EnsureSuccessOrThrowAsync();
     }
 }

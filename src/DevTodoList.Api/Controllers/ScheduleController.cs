@@ -14,7 +14,7 @@ public class ScheduleController(ScheduleParseService svc) : ControllerBase
 
     /// <summary>일정 텍스트 파싱 (미리보기)</summary>
     [HttpPost("parse")]
-    public IActionResult Parse([FromBody] ScheduleParseRequest req)
+    public IActionResult Parse([FromBody] ScheduleParseRequest req, CancellationToken ct)
         => Ok(svc.Parse(req.Text));
 
     /// <summary>파싱된 일정을 TODO로 일괄 생성</summary>

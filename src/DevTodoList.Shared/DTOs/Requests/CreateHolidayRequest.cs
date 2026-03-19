@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs.Requests;
@@ -6,6 +7,8 @@ namespace DevTodoList.Shared.DTOs.Requests;
 public class CreateHolidayRequest
 {
     public DateTime Date { get; set; }
+    [Required]
+    [StringLength(200)]
     public string Name { get; set; } = string.Empty;
     public bool IsRecurring { get; set; }
     public HolidayType HolidayType { get; set; }

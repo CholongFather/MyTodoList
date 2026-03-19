@@ -247,7 +247,7 @@ else
                     ProjectId = g.Key,
                     Name = g.First().ProjectName,
                     Color = g.First().ProjectColor,
-                    Items = g.OrderBy(t => t.SortOrder).ToList()
+                    Items = g.OrderBy(t => t.Status).ThenByDescending(t => t.EndDate ?? t.DueDate).ToList()
                 })
                 .OrderBy(g => _projects.FindIndex(p => p.Id == g.ProjectId))
                 .ToList();

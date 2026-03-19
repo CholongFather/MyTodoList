@@ -13,6 +13,6 @@ public class SettingsApiClient(IHttpClientFactory factory)
     public async Task UpdateNotificationsAsync(NotificationSettingDto dto)
     {
         var res = await Http.PutAsJsonAsync("api/settings/notifications", dto);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 }

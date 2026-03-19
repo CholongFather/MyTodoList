@@ -138,9 +138,11 @@ public class ScheduleParseService(AppDbContext db)
 
         await db.SaveChangesAsync(ct);
 
+        // N+1 방지: Project 한 번만 조회
+        var project = await db.Projects.FindAsync([projectId], ct);
         return created.Select(e =>
         {
-            e.Project = db.Projects.Find(projectId)!;
+            e.Project = project!;
             return e.ToDto();
         }).ToList();
     }

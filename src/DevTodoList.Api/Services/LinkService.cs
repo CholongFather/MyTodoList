@@ -17,6 +17,10 @@ public class LinkService(AppDbContext db)
 
     public async Task<TodoLinkDto> CreateAsync(long todoId, CreateLinkRequest req, CancellationToken ct = default)
     {
+        // FK 검증: LinkTypeId가 지정된 경우 존재 확인
+        if (req.LinkTypeId.HasValue && !await db.LinkTypes.AnyAsync(l => l.Id == req.LinkTypeId.Value, ct))
+            throw new InvalidOperationException($"링크 유형 ID {req.LinkTypeId}이(가) 존재하지 않습니다.");
+
         var entity = new TodoLinkEntity
         {
             Title = req.Title,

@@ -12,7 +12,7 @@ public class ScheduleApiClient(IHttpClientFactory factory)
     public async Task<List<ScheduleParsedItemDto>> ParseAsync(string text)
     {
         var res = await Http.PostAsJsonAsync("api/schedule/parse", new ScheduleParseRequest { Text = text });
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<List<ScheduleParsedItemDto>>() ?? [];
     }
 
@@ -32,7 +32,7 @@ public class ScheduleApiClient(IHttpClientFactory factory)
             DefaultIsExternal = defaultIsExternal
         };
         var res = await Http.PostAsJsonAsync("api/schedule/create", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<List<TodoItemDto>>() ?? [];
     }
 
@@ -52,7 +52,7 @@ public class ScheduleApiClient(IHttpClientFactory factory)
             DefaultIsExternal = defaultIsExternal
         };
         var res = await Http.PutAsJsonAsync("api/schedule/replace", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<BulkReplaceResultDto>();
     }
 }

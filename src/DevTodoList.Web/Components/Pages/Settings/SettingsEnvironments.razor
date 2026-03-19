@@ -33,12 +33,7 @@
     private List<EnvironmentDto> _envs = [];
     private string _newName = "", _newColor = "";
 
-    private static readonly string[] _palette =
-    [
-        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
-        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800"
-    ];
-    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+    private static string RandomColor() => ColorPalettes.Random();
 
     protected override async Task OnInitializedAsync()
     {

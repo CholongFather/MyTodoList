@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject NoteTypeApiClient NoteTypeApi
 @inject LinkTypeApiClient LinkTypeApi
+@inject WorkerApiClient WorkerApi
 
 <PageTitle>케이스 상세</PageTitle>
 
@@ -304,7 +305,7 @@ else
     private bool _editDialogVisible;
     private bool _editSaving;
     private CreateCaseRequest _editForm = new();
-    private CreateCaseNoteRequest _noteForm = new() { Author = "hugo" };
+    private CreateCaseNoteRequest _noteForm = new();
     private CreateLinkRequest _newLink = new();
     private long? _editingNoteId;
     private long? _editingLinkId;
@@ -318,11 +319,17 @@ else
         _loading = true;
         try
         {
-            _case = await CaseApi.GetByIdAsync(Id);
-            _projects = await ProjectApi.GetAllAsync();
-            _environments = await EnvApi.GetAllAsync();
-            _noteTypes = await NoteTypeApi.GetAllAsync();
-            _linkTypes = await LinkTypeApi.GetAllAsync();
+            await Task.WhenAll(
+                CaseApi.GetByIdAsync(Id).ContinueWith(t => _case = t.Result),
+                ProjectApi.GetAllAsync().ContinueWith(t => _projects = t.Result),
+                EnvApi.GetAllAsync().ContinueWith(t => _environments = t.Result),
+                NoteTypeApi.GetAllAsync().ContinueWith(t => _noteTypes = t.Result),
+                LinkTypeApi.GetAllAsync().ContinueWith(t => _linkTypes = t.Result),
+                WorkerApi.GetAllAsync().ContinueWith(t =>
+                {
+                    var me = t.Result.FirstOrDefault(w => w.IsMe);
+                    if (me != null) _noteForm.Author = me.Name;
+                }));
         }
         catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
         finally { _loading = false; }

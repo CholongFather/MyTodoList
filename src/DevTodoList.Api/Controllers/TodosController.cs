@@ -1,4 +1,5 @@
 using DevTodoList.Api.Services;
+using DevTodoList.Shared.Constants;
 using DevTodoList.Shared.DTOs.Requests;
 using DevTodoList.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -28,7 +29,7 @@ public class TodosController(TodoService svc) : ControllerBase
         [FromQuery] string? search,
         [FromQuery] long? teamId, [FromQuery] int? assigneeType, [FromQuery] long? workCategoryId,
         [FromQuery] long? assigneeTypeId,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] int page = PaginationDefaults.Page, [FromQuery] int pageSize = PaginationDefaults.PageSize,
         CancellationToken ct = default)
         => Ok(await svc.GetPagedAsync(projectId, status, tagIds, priority, fromDate, toDate, search, teamId, assigneeType, workCategoryId, page, pageSize, assigneeTypeId, ct));
 

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs.Requests;
@@ -6,6 +7,7 @@ namespace DevTodoList.Shared.DTOs.Requests;
 public class ScheduleParseRequest
 {
     /// <summary>파싱할 일정 텍스트</summary>
+    [Required]
     public string Text { get; set; } = string.Empty;
     /// <summary>생성할 프로젝트 ID</summary>
     public long ProjectId { get; set; }

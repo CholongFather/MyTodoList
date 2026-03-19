@@ -14,20 +14,20 @@ public class TagApiClient(IHttpClientFactory factory)
     public async Task<TagDto?> CreateAsync(CreateTagRequest req)
     {
         var res = await Http.PostAsJsonAsync("api/tags", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TagDto>();
     }
 
     public async Task<TagDto?> UpdateAsync(long id, CreateTagRequest req)
     {
         var res = await Http.PutAsJsonAsync($"api/tags/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<TagDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"api/tags/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 }

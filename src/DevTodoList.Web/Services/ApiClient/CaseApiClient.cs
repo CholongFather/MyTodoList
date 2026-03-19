@@ -50,27 +50,27 @@ public class CaseApiClient(IHttpClientFactory factory)
     public async Task<CaseDto?> CreateAsync(CreateCaseRequest req)
     {
         var res = await Http.PostAsJsonAsync(Base, req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseDto>();
     }
 
     public async Task<CaseDto?> UpdateAsync(long id, CreateCaseRequest req)
     {
         var res = await Http.PutAsJsonAsync($"{Base}/{id}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseDto>();
     }
 
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"{Base}/{id}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     public async Task<CaseDto?> UpdateStatusAsync(long id, UpdateCaseStatusRequest req)
     {
         var res = await Http.PutAsJsonAsync($"{Base}/{id}/status", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseDto>();
     }
 
@@ -82,21 +82,21 @@ public class CaseApiClient(IHttpClientFactory factory)
     public async Task<CaseNoteDto?> CreateNoteAsync(long caseId, CreateCaseNoteRequest req)
     {
         var res = await Http.PostAsJsonAsync($"{Base}/{caseId}/notes", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseNoteDto>();
     }
 
     public async Task<CaseNoteDto?> UpdateNoteAsync(long caseId, long noteId, CreateCaseNoteRequest req)
     {
         var res = await Http.PutAsJsonAsync($"{Base}/{caseId}/notes/{noteId}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseNoteDto>();
     }
 
     public async Task DeleteNoteAsync(long caseId, long noteId)
     {
         var res = await Http.DeleteAsync($"{Base}/{caseId}/notes/{noteId}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 
     // === 링크 ===
@@ -104,20 +104,20 @@ public class CaseApiClient(IHttpClientFactory factory)
     public async Task<CaseLinkDto?> CreateLinkAsync(long caseId, CreateLinkRequest req)
     {
         var res = await Http.PostAsJsonAsync($"{Base}/{caseId}/links", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseLinkDto>();
     }
 
     public async Task<CaseLinkDto?> UpdateLinkAsync(long caseId, long linkId, CreateLinkRequest req)
     {
         var res = await Http.PutAsJsonAsync($"{Base}/{caseId}/links/{linkId}", req);
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
         return await res.Content.ReadFromJsonAsync<CaseLinkDto>();
     }
 
     public async Task DeleteLinkAsync(long caseId, long linkId)
     {
         var res = await Http.DeleteAsync($"{Base}/{caseId}/links/{linkId}");
-        res.EnsureSuccessStatusCode();
+        await res.EnsureSuccessOrThrowAsync();
     }
 }
