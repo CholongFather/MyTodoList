@@ -47,8 +47,9 @@
                             }
                         </td>
                         <td>
-                            <MudCheckBox T="bool" Value="w.IsMe" ValueChanged="@(async (bool v) => await ToggleIsMeAsync(w, v))"
-                                         Color="Color.Primary" Dense />
+                            <MudIconButton Icon="@(w.IsMe ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                           Color="@(w.IsMe ? Color.Warning : Color.Default)" Size="Size.Small"
+                                           OnClick="@(async () => { if (!w.IsMe) await ToggleIsMeAsync(w, true); })" />
                         </td>
                         <td style="text-align:right;">
                             @if (_editingId != w.Id)

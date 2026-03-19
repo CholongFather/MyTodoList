@@ -215,7 +215,7 @@ else
         }
         <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
             <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
-            <MudTextField @bind-Value="_newLink.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+            <MudTextField @bind-Value="_newLink.Url" @bind-Value:after="OnLinkUrlChanged" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
             <MudSelect T="long?" @bind-Value="_newLink.LinkTypeId" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter" Clearable>
                 @foreach (var lt in _allLinkTypes) { <MudSelectItem T="long?" Value="lt.Id">@lt.Name</MudSelectItem> }
             </MudSelect>
@@ -404,6 +404,12 @@ else
 
     private async Task DeleteCheck(TodoCheckItemDto item)
     { try { await TodoApi.DeleteCheckItemAsync(Id, item.Id); _todo!.CheckItems.Remove(item); } catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); } }
+
+    private void OnLinkUrlChanged()
+    {
+        var detected = DevTodoList.Shared.Helpers.LinkTypeDetector.Detect(_newLink.Url, _allLinkTypes);
+        if (detected.HasValue) _newLink.LinkTypeId = detected;
+    }
 
     private async Task AddLink()
     { if (string.IsNullOrWhiteSpace(_newLink.Url)) return; try { var l = await TodoApi.CreateLinkAsync(Id, _newLink); if (l is not null) _todo!.Links.Add(l); _newLink = new(); } catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); } }

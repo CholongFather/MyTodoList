@@ -158,7 +158,7 @@ else
                 @* 링크 추가 폼 *@
                 <MudStack Row Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
                     <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
-                    <MudTextField @bind-Value="_newLink.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                    <MudTextField @bind-Value="_newLink.Url" @bind-Value:after="OnLinkUrlChanged" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
                     <MudSelect T="long?" @bind-Value="_newLink.LinkTypeId" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" Clearable>
                         @foreach (var lt in _linkTypes) { <MudSelectItem T="long?" Value="lt.Id">@lt.Name</MudSelectItem> }
                     </MudSelect>
@@ -282,8 +282,12 @@ else
                 </MudSelect>
             </MudStack>
             <MudStack Row Spacing="2">
-                <MudTextField @bind-Value="_editForm.Reporter" Label="보고자" Variant="Variant.Outlined" Style="flex:1;" />
-                <MudTextField @bind-Value="_editForm.Assignee" Label="담당자" Variant="Variant.Outlined" Style="flex:1;" />
+                <MudSelect T="string" @bind-Value="_editForm.Reporter" Label="보고자" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var w in _workers) { <MudSelectItem T="string" Value="w.Name">@w.Name</MudSelectItem> }
+                </MudSelect>
+                <MudSelect T="string" @bind-Value="_editForm.Assignee" Label="담당자" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var w in _workers) { <MudSelectItem T="string" Value="w.Name">@w.Name</MudSelectItem> }
+                </MudSelect>
             </MudStack>
         </MudStack>
     </DialogContent>
@@ -313,6 +317,7 @@ else
     private string _editLinkUrl = "";
     private List<NoteTypeDto> _noteTypes = [];
     private List<LinkTypeDto> _linkTypes = [];
+    private List<WorkerDto> _workers = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -327,7 +332,8 @@ else
                 LinkTypeApi.GetAllAsync().ContinueWith(t => _linkTypes = t.Result),
                 WorkerApi.GetAllAsync().ContinueWith(t =>
                 {
-                    var me = t.Result.FirstOrDefault(w => w.IsMe);
+                    _workers = t.Result;
+                    var me = _workers.FirstOrDefault(w => w.IsMe);
                     if (me != null) _noteForm.Author = me.Name;
                 }));
         }
@@ -485,6 +491,12 @@ else
     }
 
     // === 링크 CRUD ===
+
+    private void OnLinkUrlChanged()
+    {
+        var detected = DevTodoList.Shared.Helpers.LinkTypeDetector.Detect(_newLink.Url, _linkTypes);
+        if (detected.HasValue) _newLink.LinkTypeId = detected;
+    }
 
     private async Task AddLinkAsync()
     {
