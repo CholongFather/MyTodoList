@@ -18,21 +18,39 @@
     else
     {
         <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
-            <thead><tr><th style="width:40px;">색상</th><th style="width:40px;">아이콘</th><th>이름</th><th style="width:80px;"></th></tr></thead>
+            <thead><tr><th style="width:40px;">색상</th><th style="width:40px;">아이콘</th><th>이름</th><th style="width:120px;"></th></tr></thead>
             <tbody>
                 @foreach (var nt in _noteTypes)
                 {
+                    var item = nt;
                     <tr>
-                        <td><div style="width:24px;height:24px;border-radius:50%;background:@nt.Color;"></div></td>
+                        <td><div style="width:24px;height:24px;border-radius:50%;background:@item.Color;"></div></td>
+                        <td>@if (!string.IsNullOrWhiteSpace(item.Icon)) { <MudIcon Icon="@item.Icon" Size="Size.Small" /> }</td>
                         <td>
-                            @if (!string.IsNullOrWhiteSpace(nt.Icon))
+                            @if (_editingId == item.Id)
                             {
-                                <MudIcon Icon="@nt.Icon" Size="Size.Small" />
+                                <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudTextField T="string" @bind-Value="_editName" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" />
+                                    <MudTextField T="string" @bind-Value="_editColor" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:80px;" />
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@_editColor;flex-shrink:0;"></div>
+                                    <MudSelect T="string" @bind-Value="_editIcon" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" Dense AnchorOrigin="Origin.BottomCenter">
+                                        @foreach (var ic in _iconOptions) { <MudSelectItem T="string" Value="@ic.Value"><MudIcon Icon="@ic.Value" Size="Size.Small" Class="mr-1" /> @ic.Label</MudSelectItem> }
+                                    </MudSelect>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" OnClick="@(() => SaveEditAsync(item))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelEdit" />
+                                </MudStack>
+                            }
+                            else
+                            {
+                                @item.Name
                             }
                         </td>
-                        <td>@nt.Name</td>
                         <td style="text-align:right;">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(nt))" />
+                            @if (_editingId != item.Id)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default" OnClick="@(() => StartEdit(item))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(item))" />
+                            }
                         </td>
                     </tr>
                 }
@@ -43,8 +61,9 @@
             <MudTextField T="string" @bind-Value="_newName" Label="유형 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
             <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
             <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
-            <MudTextField T="string" @bind-Value="_newIcon" Label="아이콘" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;"
-                          Placeholder="MudBlazor 아이콘 문자열" />
+            <MudSelect T="string" @bind-Value="_newIcon" Label="아이콘" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" Dense AnchorOrigin="Origin.BottomCenter">
+                @foreach (var ic in _iconOptions) { <MudSelectItem T="string" Value="@ic.Value"><MudIcon Icon="@ic.Value" Size="Size.Small" Class="mr-1" /> @ic.Label</MudSelectItem> }
+            </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
         </MudStack>
     }
@@ -53,9 +72,32 @@
 @code {
     private List<NoteTypeDto> _noteTypes = [];
     private bool _loading = true;
-    private string _newName = "";
-    private string _newColor = "";
+    private string _newName = "", _newColor = "";
     private string? _newIcon;
+    private long? _editingId;
+    private string _editName = "", _editColor = "";
+    private string? _editIcon;
+
+    // 노트 유형에 적합한 아이콘 목록
+    private static readonly (string Value, string Label)[] _iconOptions =
+    [
+        (Icons.Material.Filled.Comment, "댓글"),
+        (Icons.Material.Filled.MenuBook, "가이드"),
+        (Icons.Material.Filled.Build, "도구"),
+        (Icons.Material.Filled.FindInPage, "검색"),
+        (Icons.Material.Filled.Info, "정보"),
+        (Icons.Material.Filled.Warning, "경고"),
+        (Icons.Material.Filled.Error, "에러"),
+        (Icons.Material.Filled.BugReport, "버그"),
+        (Icons.Material.Filled.Lightbulb, "아이디어"),
+        (Icons.Material.Filled.Notes, "메모"),
+        (Icons.Material.Filled.Description, "문서"),
+        (Icons.Material.Filled.QuestionAnswer, "질문"),
+        (Icons.Material.Filled.CheckCircle, "확인"),
+        (Icons.Material.Filled.Star, "중요"),
+        (Icons.Material.Filled.Flag, "플래그"),
+        (Icons.Material.Filled.Bookmark, "북마크"),
+    ];
 
     private static readonly string[] _palette =
     [
@@ -87,6 +129,23 @@
             _newIcon = null;
             await LoadAsync();
             Snackbar.Add("노트 유형이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private void StartEdit(NoteTypeDto nt) { _editingId = nt.Id; _editName = nt.Name; _editColor = nt.Color; _editIcon = nt.Icon; }
+    private void CancelEdit() => _editingId = null;
+
+    private async Task SaveEditAsync(NoteTypeDto nt)
+    {
+        try
+        {
+            await NoteTypeApi.UpdateAsync(nt.Id, new CreateNoteTypeRequest { Name = _editName, Color = _editColor, Icon = _editIcon });
+            nt.Name = _editName;
+            nt.Color = _editColor;
+            nt.Icon = _editIcon;
+            _editingId = null;
+            Snackbar.Add("수정되었습니다.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
     }

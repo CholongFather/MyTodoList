@@ -7,10 +7,8 @@
 @inject ProjectApiClient ProjectApi
 @inject TagApiClient TagApi
 @inject TeamApiClient TeamApi
-@inject AssigneeTypeApiClient AssigneeTypeApi
 @inject WorkerApiClient WorkerApi
 @inject LinkTypeApiClient LinkTypeApi
-@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -45,7 +43,7 @@ else
             }
             <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="DeleteAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Delete">삭제</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="DuplicateAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.ContentCopy">복제</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">저장</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ManualSaveAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">저장</MudButton>
         </MudStack>
     </MudStack>
 
@@ -56,8 +54,8 @@ else
             <MudText Typo="Typo.subtitle1">기본 정보</MudText>
         </div>
         <MudGrid>
-            <MudItem xs="12"><MudTextField @bind-Value="_form.Title" @bind-Value:after="ScheduleDraftSave" Label="제목" Required Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12"><MudTextField @bind-Value="_form.Description" @bind-Value:after="ScheduleDraftSave" Label="설명" Lines="4" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_form.Title" @bind-Value:after="ScheduleAutoSave" Label="제목" Required Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_form.Description" @bind-Value:after="ScheduleAutoSave" Label="설명" Lines="4" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="6" sm="3">
                 @if (_todo!.AssigneeType == AssigneeType.Others)
                 {
@@ -75,29 +73,24 @@ else
                 }
             </MudItem>
             <MudItem xs="6" sm="3">
-                <MudSelect T="TodoPriority" @bind-Value="_form.Priority" Label="우선순위" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                <MudSelect T="TodoPriority" @bind-Value="_form.Priority" @bind-Value:after="AutoSaveAsync" Label="우선순위" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
                     @foreach (TodoPriority p in Enum.GetValues<TodoPriority>()) { <MudSelectItem T="TodoPriority" Value="p">@PL(p)</MudSelectItem> }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
                 <SearchableSelect TItem="ProjectDto" TValue="long"
                     Items="_projects" ValueSelector="@(p => p.Id)" TextSelector="@(p => p.Name)"
-                    @bind-Value="_form.ProjectId" Label="프로젝트" />
+                    @bind-Value="_form.ProjectId" @bind-Value:after="AutoSaveAsync" Label="프로젝트" />
             </MudItem>
             @* 팀/작업분류/담당유형 *@
             <MudItem xs="12" sm="4">
                 <SearchableSelect TItem="TeamDto" TValue="long?"
                     Items="_teams" ValueSelector="@(t => (long?)t.Id)" TextSelector="@(t => t.Name)"
-                    @bind-Value="_formTeamId" @bind-Value:after="OnTeamChanged" Label="담당 팀" Clearable />
+                    @bind-Value="_formTeamId" @bind-Value:after="OnTeamChangedAndSave" Label="담당 팀" Clearable />
             </MudItem>
             <MudItem xs="12" sm="4">
-                <MudSelect T="long?" @bind-Value="_formWorkCategoryId" Label="작업 분류" Variant="Variant.Outlined" Clearable AnchorOrigin="Origin.BottomCenter">
+                <MudSelect T="long?" @bind-Value="_formWorkCategoryId" @bind-Value:after="AutoSaveAsync" Label="작업 분류" Variant="Variant.Outlined" Clearable AnchorOrigin="Origin.BottomCenter">
                     @foreach (var cat in _availableCategories) { <MudSelectItem T="long?" Value="cat.Id">@cat.Name</MudSelectItem> }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudSelect T="long?" Value="_formAssigneeTypeId" ValueChanged="OnAssigneeTypeChanged" Label="담당 유형" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
-                    @foreach (var at in _assigneeTypes) { <MudSelectItem T="long?" Value="at.Id">@at.Name</MudSelectItem> }
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="4">
@@ -106,14 +99,14 @@ else
             @if (_formIsExternal)
             {
                 <MudItem xs="12" sm="8">
-                    <MudTextField @bind-Value="_formExternalLabel" Label="외부 채널명" Variant="Variant.Outlined" Placeholder="예: NK 이벤트빌더, 바람의나라 QA" />
+                    <MudTextField @bind-Value="_formExternalLabel" @bind-Value:after="ScheduleAutoSave" Label="외부 채널명" Variant="Variant.Outlined" Placeholder="예: NK 이벤트빌더, 바람의나라 QA" />
                 </MudItem>
             }
-            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_startDate" Label="시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
-            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_endDate" Label="마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_startDate" @bind-Date:after="AutoSaveAsync" Label="시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_endDate" @bind-Date:after="AutoSaveAsync" Label="마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
             @* 계획일 *@
-            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedStartDate" Label="계획 시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
-            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedEndDate" Label="계획 마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedStartDate" @bind-Date:after="AutoSaveAsync" Label="계획 시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
+            <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedEndDate" @bind-Date:after="AutoSaveAsync" Label="계획 마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
             @* 실제 일정 표시 *@
             @if (_todo?.ActualStartDate.HasValue == true || _todo?.IsDelayed == true)
             {
@@ -245,11 +238,7 @@ else
     private List<LinkTypeDto> _allLinkTypes = [];
     private long? _formTeamId;
     private long? _formWorkCategoryId;
-    private long? _formAssigneeTypeId;
-    private List<AssigneeTypeDto> _assigneeTypes = [];
-    private System.Threading.Timer? _draftTimer;
-    private string DraftKey => $"todo-draft-{Id}";
-    private const int DraftTtlMs = 30 * 60 * 1000; // 30분
+    private System.Threading.Timer? _autoSaveTimer;
     private bool _formIsExternal;
     private string? _formExternalLabel;
     private bool _loading = true, _saving;
@@ -268,7 +257,6 @@ else
                 ProjectApi.GetAllAsync().ContinueWith(t => _projects = t.Result),
                 TagApi.GetAllAsync().ContinueWith(t => _allTags = t.Result),
                 TeamApi.GetAllAsync().ContinueWith(t => _teams = t.Result),
-                AssigneeTypeApi.GetAllAsync().ContinueWith(t => _assigneeTypes = t.Result),
                 WorkerApi.GetAllAsync().ContinueWith(t => _allWorkers = t.Result),
                 LinkTypeApi.GetAllAsync().ContinueWith(t => _allLinkTypes = t.Result));
             if (_todo is not null)
@@ -282,37 +270,38 @@ else
                 // 팀/작업분류/담당유형 폼 초기값
                 _formTeamId = _todo.TeamId;
                 _formWorkCategoryId = _todo.WorkCategoryId;
-                _formAssigneeTypeId = _todo.AssigneeTypeId;
                 _formIsExternal = _todo.IsExternal;
                 _formExternalLabel = _todo.ExternalLabel;
                 OnTeamChanged();
-
-                // localStorage 임시 저장 복원
-                try
-                {
-                    var draft = await JS.InvokeAsync<Dictionary<string, object>?>("draftStorage.load", DraftKey, DraftTtlMs);
-                    if (draft != null)
-                    {
-                        var restore = await DialogService.ShowMessageBoxAsync("임시 저장 복원", "이전에 저장되지 않은 변경사항이 있습니다. 복원하시겠습니까?", yesText: "복원", cancelText: "무시");
-                        if (restore == true)
-                        {
-                            if (draft.TryGetValue("title", out var t)) _form.Title = t?.ToString() ?? _form.Title;
-                            if (draft.TryGetValue("description", out var d)) _form.Description = d?.ToString();
-                        }
-                        else
-                        {
-                            try { await JS.InvokeVoidAsync("draftStorage.remove", DraftKey); } catch { }
-                        }
-                    }
-                }
-                catch { }
             }
         }
         catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
         finally { _loading = false; }
     }
 
-    private async Task SaveAsync()
+    /// <summary>자동 저장 (모든 필드 변경 시 즉시 API 호출)</summary>
+    private async Task AutoSaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Title) || _saving) return;
+        _saving = true;
+        try
+        {
+            _form.DueDate = _endDate; _form.StartDate = _startDate; _form.EndDate = _endDate; _form.TagIds = _selectedTagIds;
+            _form.WorkerIds = _selectedWorkerIds;
+            _form.PlannedStartDate = _plannedStartDate;
+            _form.PlannedEndDate = _plannedEndDate;
+            _form.TeamId = _formTeamId;
+            _form.WorkCategoryId = _formWorkCategoryId;
+            _form.IsExternal = _formIsExternal;
+            _form.ExternalLabel = _formExternalLabel;
+            _todo = await TodoApi.UpdateAsync(Id, _form);
+        }
+        catch (Exception ex) { Snackbar.Add($"자동 저장 실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; StateHasChanged(); }
+    }
+
+    /// <summary>수동 저장 버튼</summary>
+    private async Task ManualSaveAsync()
     {
         if (string.IsNullOrWhiteSpace(_form.Title)) { Snackbar.Add("제목을 입력하세요.", Severity.Warning); return; }
         _saving = true;
@@ -322,16 +311,12 @@ else
             _form.WorkerIds = _selectedWorkerIds;
             _form.PlannedStartDate = _plannedStartDate;
             _form.PlannedEndDate = _plannedEndDate;
-            // 팀/작업분류/담당유형 반영
             _form.TeamId = _formTeamId;
             _form.WorkCategoryId = _formWorkCategoryId;
-            _form.AssigneeTypeId = _formAssigneeTypeId;
             _form.IsExternal = _formIsExternal;
             _form.ExternalLabel = _formExternalLabel;
             _todo = await TodoApi.UpdateAsync(Id, _form);
-            try { await JS.InvokeVoidAsync("draftStorage.remove", DraftKey); } catch { }
             Snackbar.Add("저장되었습니다.", Severity.Success);
-            Navigation.NavigateTo("/todos");
         }
         catch (Exception ex) { Snackbar.Add($"저장 실패: {ex.Message}", Severity.Error); }
         finally { _saving = false; }
@@ -381,58 +366,44 @@ else
         catch (Exception ex) { Snackbar.Add($"태그 변경 실패: {ex.Message}", Severity.Error); }
     }
 
-    /// <summary>작업자 토글 → 즉시 API 호출</summary>
+    /// <summary>작업자 토글 → 즉시 API 호출 + IsMe 기반 AssigneeType 자동 결정</summary>
     private async Task ToggleWorker(long workerId)
     {
         if (!_selectedWorkerIds.Remove(workerId)) _selectedWorkerIds.Add(workerId);
         try
         {
             await TodoApi.UpdateWorkersAsync(Id, _selectedWorkerIds);
+            // 작업자 중 IsMe=true가 있으면 내 작업, 없으면 타인 작업 (UI 즉시 반영)
+            if (_selectedWorkerIds.Count > 0)
+            {
+                var hasMe = _allWorkers.Any(w => _selectedWorkerIds.Contains(w.Id) && w.IsMe);
+                _todo!.AssigneeType = hasMe ? AssigneeType.Mine : AssigneeType.Others;
+            }
         }
         catch (Exception ex) { Snackbar.Add($"작업자 변경 실패: {ex.Message}", Severity.Error); }
     }
 
-    /// <summary>담당 유형 변경 → 즉시 API 호출</summary>
-    private async Task OnAssigneeTypeChanged(long? newTypeId)
-    {
-        if (_formAssigneeTypeId == newTypeId) return;
-        _formAssigneeTypeId = newTypeId;
-        try
-        {
-            await TodoApi.UpdateAssigneeTypeAsync(Id, newTypeId);
-            var atEntity = _assigneeTypes.FirstOrDefault(at => at.Id == newTypeId);
-            _todo!.AssigneeType = atEntity?.IsMine == true ? AssigneeType.Mine : AssigneeType.Others;
-            _todo.AssigneeTypeId = newTypeId;
-            _todo.AssigneeTypeName = atEntity?.Name;
-            _todo.AssigneeTypeColor = atEntity?.Color;
-        }
-        catch (Exception ex) { Snackbar.Add($"담당 유형 변경 실패: {ex.Message}", Severity.Error); }
-    }
-
-    /// <summary>외부 일정 토글 → 타인 작업 강제</summary>
+    /// <summary>외부 일정 토글 → 즉시 저장</summary>
     private async Task OnExternalChanged(bool val)
     {
         _formIsExternal = val;
-        if (val)
-        {
-            var othersId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
-            if (_formAssigneeTypeId != othersId)
-                await OnAssigneeTypeChanged(othersId);
-        }
+        await AutoSaveAsync();
     }
 
-    /// <summary>팀 변경 시 작업 분류 목록 갱신 + AssigneeType 자동 설정</summary>
+    /// <summary>팀 변경 시 작업 분류 목록 갱신</summary>
     private void OnTeamChanged()
     {
         var team = _teams.FirstOrDefault(t => t.Id == _formTeamId);
         _availableCategories = team?.WorkCategories ?? [];
         if (_availableCategories.All(c => c.Id != _formWorkCategoryId))
             _formWorkCategoryId = _availableCategories.FirstOrDefault()?.Id;
-        // 내 팀이면 Mine, 아니면 Others 자동 설정
-        if (team is not null)
-            _formAssigneeTypeId = team.IsMine
-                ? _assigneeTypes.FirstOrDefault(at => at.IsMine)?.Id
-                : _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+    }
+
+    /// <summary>팀 변경 → 분류 갱신 + 즉시 저장</summary>
+    private async Task OnTeamChangedAndSave()
+    {
+        OnTeamChanged();
+        await AutoSaveAsync();
     }
 
     private async Task ToggleCheck(TodoCheckItemDto item)
@@ -481,29 +452,17 @@ else
         finally { _saving = false; }
     }
 
-    /// <summary>제목/설명 변경 시 2초 후 localStorage에 임시 저장</summary>
-    private void ScheduleDraftSave()
+    /// <summary>텍스트 필드 변경 시 1초 디바운스 후 자동 저장</summary>
+    private void ScheduleAutoSave()
     {
-        _draftTimer?.Dispose();
-        _draftTimer = new System.Threading.Timer(_ =>
+        _autoSaveTimer?.Dispose();
+        _autoSaveTimer = new System.Threading.Timer(_ =>
         {
-            _ = InvokeAsync(async () =>
-            {
-                try
-                {
-                    var draft = new Dictionary<string, object?>
-                    {
-                        ["title"] = _form.Title,
-                        ["description"] = _form.Description,
-                    };
-                    await JS.InvokeVoidAsync("draftStorage.save", DraftKey, draft);
-                }
-                catch { }
-            });
-        }, null, 2000, Timeout.Infinite);
+            _ = InvokeAsync(AutoSaveAsync);
+        }, null, 1000, Timeout.Infinite);
     }
 
-    public void Dispose() => _draftTimer?.Dispose();
+    public void Dispose() => _autoSaveTimer?.Dispose();
 
     static string SL(TodoStatus s) => s.ToKorean();
     static string PL(TodoPriority p) => p.ToKorean();

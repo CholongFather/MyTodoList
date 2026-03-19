@@ -1,0 +1,112 @@
+@page "/settings/bus-stations"
+
+@inject BusStationApiClient BusStationApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>버스 정류장 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.DirectionsBus" Color="Color.Success" />
+    <MudText Typo="Typo.h5">버스 정류장 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    @if (_loading) { <MudProgressLinear Indeterminate /> }
+    else
+    {
+        <MudSimpleTable Dense Hover Striped Elevation="0" Style="border-radius:8px;">
+            <thead>
+                <tr>
+                    <th>이름</th><th>노선</th><th>정류장</th><th>방향</th>
+                    <th style="width:180px;">GBIS 정보</th><th style="width:40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var st in _stations)
+                {
+                    <tr>
+                        <td><MudText Typo="Typo.body2" Style="font-weight:600;">@st.Name</MudText></td>
+                        <td>@st.BusRouteNumber</td>
+                        <td>@st.BusStopName</td>
+                        <td>
+                            @if (st.Direction != BusDirection.Unspecified)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@(st.Direction == BusDirection.Upbound ? Color.Info : Color.Warning)">@st.Direction.ToKorean()</MudChip>
+                            }
+                        </td>
+                        <td><MudText Typo="Typo.caption" Class="mud-text-secondary">@st.GbisStationId / @st.GbisRouteId / @st.GbisStaOrder</MudText></td>
+                        <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(st.Id))" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-3" Style="flex-wrap:wrap;">
+            <MudTextField T="string" @bind-Value="_newName" Label="이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" Placeholder="예: 청현마을-1112" />
+            <MudTextField T="string" @bind-Value="_newRoute" Label="노선" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" Placeholder="1112" />
+            <MudTextField T="string" @bind-Value="_newStop" Label="정류장" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" Placeholder="청현마을·수원신갈IC" />
+            <MudSelect T="int" @bind-Value="_newDirection" Label="방향" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;">
+                <MudSelectItem T="int" Value="0">미지정</MudSelectItem>
+                <MudSelectItem T="int" Value="1">상행</MudSelectItem>
+                <MudSelectItem T="int" Value="2">하행</MudSelectItem>
+            </MudSelect>
+            <MudTextField T="string" @bind-Value="_newGbisStation" Label="정류소ID" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" />
+            <MudTextField T="string" @bind-Value="_newGbisRoute" Label="노선ID" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" />
+            <MudNumericField T="int?" @bind-Value="_newGbisOrder" Label="순번" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:80px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync"
+                       Disabled="@(string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newRoute))">추가</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private List<BusStationDto> _stations = [];
+    private bool _loading = true;
+    private string _newName = "", _newRoute = "", _newStop = "";
+    private int _newDirection;
+    private string? _newGbisStation, _newGbisRoute;
+    private int? _newGbisOrder;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _stations = await BusStationApi.GetAllAsync(); } catch { } finally { _loading = false; }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newRoute)) return;
+        try
+        {
+            await BusStationApi.CreateAsync(new CreateBusStationRequest
+            {
+                Name = _newName, BusRouteNumber = _newRoute, BusStopName = _newStop,
+                Direction = _newDirection, GbisStationId = _newGbisStation,
+                GbisRouteId = _newGbisRoute, GbisStaOrder = _newGbisOrder
+            });
+            _newName = _newRoute = _newStop = "";
+            _newDirection = 0;
+            _newGbisStation = _newGbisRoute = null;
+            _newGbisOrder = null;
+            _stations = await BusStationApi.GetAllAsync();
+            Snackbar.Add("정류장이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(long id)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("정류장 삭제", "이 정류장을 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+        try
+        {
+            await BusStationApi.DeleteAsync(id);
+            _stations = await BusStationApi.GetAllAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

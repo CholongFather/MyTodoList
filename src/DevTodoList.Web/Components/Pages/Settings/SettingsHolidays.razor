@@ -1,0 +1,120 @@
+@page "/settings/holidays"
+
+@inject HolidayApiClient HolidayApi
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>공휴일 / 연차 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Error" />
+    <MudText Typo="Typo.h5">공휴일 / 연차 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudSelect T="int" @bind-Value="_year" Label="연도" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" AnchorOrigin="Origin.BottomCenter">
+            @foreach (var y in _yearOptions)
+            { <MudSelectItem T="int" Value="y">@y</MudSelectItem> }
+        </MudSelect>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="LoadAsync" StartIcon="@Icons.Material.Filled.Refresh">조회</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" OnClick="SeedKoreanAsync" StartIcon="@Icons.Material.Filled.AutoAwesome">한국 공휴일 불러오기</MudButton>
+    </MudStack>
+
+    @if (_holidays.Count > 0)
+    {
+        <MudSimpleTable Dense Hover Striped Elevation="0" Style="border-radius:8px;">
+            <thead><tr><th style="width:70px;">유형</th><th style="width:120px;">날짜</th><th>이름</th><th style="width:60px;">반복</th><th style="width:40px;"></th></tr></thead>
+            <tbody>
+                @foreach (var h in _holidays)
+                {
+                    <tr>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                     Color="@(h.HolidayType == HolidayType.PersonalLeave ? Color.Secondary : Color.Info)">
+                                @(h.HolidayType == HolidayType.PersonalLeave ? "연차" : "공휴일")
+                            </MudChip>
+                        </td>
+                        <td><MudText Typo="Typo.body2">@h.Date.ToString("yyyy-MM-dd")</MudText></td>
+                        <td><MudText Typo="Typo.body2">@h.Name</MudText></td>
+                        <td>@(h.IsRecurring ? "매년" : "")</td>
+                        <td><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(h.Id))" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense>등록된 공휴일이 없습니다.</MudAlert>
+    }
+
+    <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-3" Style="flex-wrap:wrap;">
+        <MudSelect T="HolidayType" @bind-Value="_newType" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;">
+            <MudSelectItem T="HolidayType" Value="HolidayType.PublicHoliday">공휴일</MudSelectItem>
+            <MudSelectItem T="HolidayType" Value="HolidayType.PersonalLeave">연차</MudSelectItem>
+        </MudSelect>
+        <MudDatePicker @bind-Date="_newDate" Label="날짜" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" Style="max-width:160px;"
+                       AnchorOrigin="Origin.TopLeft" TransformOrigin="Origin.BottomLeft" />
+        <MudTextField T="string" @bind-Value="_newName" Label="이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
+        <MudCheckBox T="bool" @bind-Value="_newRecurring" Label="매년 반복" Dense />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync"
+                   Disabled="@(_newDate is null || string.IsNullOrWhiteSpace(_newName))">추가</MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private List<HolidayDto> _holidays = [];
+    private int _year = DateTime.Now.Year;
+    private static readonly int[] _yearOptions = Enumerable.Range(DateTime.Now.Year - 1, 4).ToArray();
+    private DateTime? _newDate;
+    private string _newName = "";
+    private bool _newRecurring;
+    private HolidayType _newType;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try { _holidays = await HolidayApi.GetByYearAsync(_year); } catch { }
+    }
+
+    private async Task SeedKoreanAsync()
+    {
+        try
+        {
+            var count = await HolidayApi.SeedKoreanAsync(_year);
+            await LoadAsync();
+            Snackbar.Add(count > 0 ? $"{_year}년 한국 공휴일 {count}건 등록 완료" : "이미 모두 등록되어 있습니다.", count > 0 ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_newDate is null || string.IsNullOrWhiteSpace(_newName)) return;
+        try
+        {
+            await HolidayApi.CreateAsync(new CreateHolidayRequest { Date = _newDate.Value, Name = _newName, IsRecurring = _newRecurring, HolidayType = _newType });
+            _newName = "";
+            _newDate = null;
+            _newRecurring = false;
+            _newType = HolidayType.PublicHoliday;
+            await LoadAsync();
+            Snackbar.Add("공휴일이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(long id)
+    {
+        try
+        {
+            await HolidayApi.DeleteAsync(id);
+            await LoadAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

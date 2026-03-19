@@ -146,7 +146,7 @@
 /* 단일 스크롤 컨테이너 */
 .gantt-scroll-container {
     overflow: auto;
-    max-height: 500px;
+    max-height: 75vh;
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: var(--dtl-radius-md);
 }

@@ -236,6 +236,7 @@ public static class MappingExtensions
         Id = e.Id,
         Name = e.Name,
         Color = e.Color,
+        IsMe = e.IsMe,
         SortOrder = e.SortOrder
     };
 

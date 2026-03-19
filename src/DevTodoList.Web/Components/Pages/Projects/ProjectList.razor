@@ -4,7 +4,6 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
-@inject IJSRuntime JS
 
 <PageTitle>프로젝트</PageTitle>
 
@@ -35,7 +34,6 @@ else
                                 <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Small" />
                             </MudAvatar>
                             <MudText Typo="Typo.h6" Class="dtl-list-item" Style="flex:1; border:none; padding:0;" @onclick="@(() => Navigation.NavigateTo($"/projects/{project.Id}"))">@project.Name</MudText>
-                            <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small" OnClick="() => OpenMetaDialog(project)" title="정보 관리" />
                             <MudMenu Icon="@Icons.Material.Filled.MoreVert">
                                 <MudMenuItem OnClick="() => OpenEditDialog(project)" Icon="@Icons.Material.Filled.Edit">수정</MudMenuItem>
                                 <MudMenuItem OnClick="() => ConfirmDelete(project)" Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error">삭제</MudMenuItem>
@@ -46,43 +44,6 @@ else
                             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3 dtl-truncate" Style="display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal;">
                                 @project.Description
                             </MudText>
-                        }
-
-                        @* 메타 정보 표시 *@
-                        @if (project.Metas.Count > 0)
-                        {
-                            <MudDivider Class="my-2" />
-                            <MudStack Spacing="1">
-                                @foreach (var meta in project.Metas)
-                                {
-                                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                                        <MudIcon Icon="@MetaIcon(meta.MetaType)" Size="Size.Small" Color="@MetaColor(meta.MetaType)" />
-                                        <MudText Typo="Typo.caption" Style="min-width:60px; font-weight:500;">@meta.Label</MudText>
-                                        @if (meta.MetaType == ProjectMetaType.Url)
-                                        {
-                                            <MudLink Href="@meta.Value" Target="_blank" Typo="Typo.caption" Underline="Underline.Hover" Class="dtl-truncate" Style="flex:1;">
-                                                @TruncateUrl(meta.Value)
-                                            </MudLink>
-                                        }
-                                        else if (meta.MetaType == ProjectMetaType.Credential)
-                                        {
-                                            <MudText Typo="Typo.caption" Style="flex:1; font-family:monospace;">
-                                                @(IsRevealed(meta.Id) ? meta.Value : "********")
-                                            </MudText>
-                                            <MudIconButton Icon="@(IsRevealed(meta.Id) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                                           Size="Size.Small" OnClick="@(() => ToggleReveal(meta.Id))" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
-                                                           OnClick="@(() => CopyToClipboard(meta.Value))" />
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Style="flex:1;">@meta.Value</MudText>
-                                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
-                                                           OnClick="@(() => CopyToClipboard(meta.Value))" />
-                                        }
-                                    </MudStack>
-                                }
-                            </MudStack>
                         }
 
                         <MudDivider Class="my-2" />
@@ -142,84 +103,6 @@ else
     </DialogActions>
 </MudDialog>
 
-@* 메타 정보 관리 다이얼로그 *@
-<MudDialog @bind-Visible="_metaDialogVisible" Options="new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true }">
-    <TitleContent>
-        <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h6">정보 관리</MudText>
-            @if (_metaProject is not null)
-            {
-                <MudChip T="string" Size="Size.Small" Style="@($"background:{_metaProject.Color}; color:white;")">@_metaProject.Name</MudChip>
-            }
-        </MudStack>
-    </TitleContent>
-    <DialogContent>
-        <MudStack Spacing="3" Class="pa-2">
-            @* 기존 메타 목록 *@
-            @if (_metaProject?.Metas.Count > 0)
-            {
-                <MudPaper Class="dtl-section" Elevation="0">
-                    <MudSimpleTable Hover Striped Elevation="0">
-                        <thead>
-                            <tr><th>유형</th><th>라벨</th><th>값</th><th style="width:100px;"></th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var meta in _metaProject.Metas)
-                            {
-                                <tr>
-                                    <td><MudChip T="string" Size="Size.Small" Color="@MetaColor(meta.MetaType)" Variant="Variant.Filled">@MetaTypeLabel(meta.MetaType)</MudChip></td>
-                                    <td>@meta.Label</td>
-                                    <td class="dtl-truncate" style="max-width:300px; font-family:@(meta.MetaType == ProjectMetaType.Credential ? "monospace" : "inherit");">
-                                        @if (meta.MetaType == ProjectMetaType.Credential)
-                                        { @(IsRevealed(meta.Id) ? meta.Value : "********") }
-                                        else if (meta.MetaType == ProjectMetaType.Url)
-                                        { <MudLink Href="@meta.Value" Target="_blank">@TruncateUrl(meta.Value)</MudLink> }
-                                        else { @meta.Value }
-                                    </td>
-                                    <td>
-                                        @if (meta.MetaType == ProjectMetaType.Credential)
-                                        {
-                                            <MudIconButton Icon="@(IsRevealed(meta.Id) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                                           Size="Size.Small" OnClick="@(() => ToggleReveal(meta.Id))" />
-                                        }
-                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" OnClick="@(() => CopyToClipboard(meta.Value))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteMetaAsync(meta))" />
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </MudPaper>
-            }
-            else
-            {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Text">등록된 정보가 없습니다.</MudAlert>
-            }
-
-            @* 새 메타 추가 *@
-            <MudText Typo="Typo.subtitle2" Style="font-weight:600;">새 정보 추가</MudText>
-            <MudStack Row Spacing="2" AlignItems="AlignItems.End">
-                <MudSelect T="ProjectMetaType" @bind-Value="_metaForm.MetaType" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;">
-                    <MudSelectItem T="ProjectMetaType" Value="ProjectMetaType.Url">URL</MudSelectItem>
-                    <MudSelectItem T="ProjectMetaType" Value="ProjectMetaType.Version">버전</MudSelectItem>
-                    <MudSelectItem T="ProjectMetaType" Value="ProjectMetaType.Credential">비밀번호</MudSelectItem>
-                </MudSelect>
-                <MudTextField @bind-Value="_metaForm.Label" Label="라벨" Variant="Variant.Outlined" Margin="Margin.Dense"
-                              Placeholder="@MetaPlaceholder(_metaForm.MetaType)" Style="flex:1;" />
-                <MudTextField @bind-Value="_metaForm.Value" Label="값" Variant="Variant.Outlined" Margin="Margin.Dense"
-                              InputType="@(_metaForm.MetaType == ProjectMetaType.Credential ? InputType.Password : InputType.Text)"
-                              Style="flex:2;" />
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddMetaAsync"
-                           Disabled="@(string.IsNullOrWhiteSpace(_metaForm.Label) || string.IsNullOrWhiteSpace(_metaForm.Value) || _metaSaving)"
-                           StartIcon="@Icons.Material.Filled.Add" Style="height:40px;">추가</MudButton>
-            </MudStack>
-        </MudStack>
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="() => _metaDialogVisible = false">닫기</MudButton>
-    </DialogActions>
-</MudDialog>
-
 @code {
     private List<ProjectDto> _projects = [];
     private bool _loading = true, _saving;
@@ -227,12 +110,6 @@ else
     private long _editId;
     private CreateProjectRequest _form = new();
     private MudColor _colorValue = new("#1976D2");
-
-    // 메타 관리
-    private bool _metaDialogVisible, _metaSaving;
-    private ProjectDto? _metaProject;
-    private CreateProjectMetaRequest _metaForm = new();
-    private HashSet<long> _revealedIds = [];
 
     protected override async Task OnInitializedAsync() => await LoadProjectsAsync();
 
@@ -261,14 +138,6 @@ else
         _dialogVisible = true;
     }
 
-    private void OpenMetaDialog(ProjectDto project)
-    {
-        _metaProject = project;
-        _metaForm = new();
-        _revealedIds.Clear();
-        _metaDialogVisible = true;
-    }
-
     private async Task SaveAsync()
     {
         if (string.IsNullOrWhiteSpace(_form.Name)) { Snackbar.Add("이름을 입력하세요.", Severity.Warning); return; }
@@ -295,48 +164,4 @@ else
         }
     }
 
-    // === 메타 관리 ===
-
-    private async Task AddMetaAsync()
-    {
-        if (_metaProject is null || string.IsNullOrWhiteSpace(_metaForm.Label) || string.IsNullOrWhiteSpace(_metaForm.Value)) return;
-        _metaSaving = true;
-        try
-        {
-            var meta = await ProjectApi.CreateMetaAsync(_metaProject.Id, _metaForm);
-            if (meta is not null) _metaProject.Metas.Add(meta);
-            _metaForm = new() { MetaType = _metaForm.MetaType };
-            Snackbar.Add("추가되었습니다.", Severity.Success);
-            var idx = _projects.FindIndex(p => p.Id == _metaProject.Id);
-            if (idx >= 0) _projects[idx] = _metaProject;
-        }
-        catch (Exception ex) { Snackbar.Add($"추가 실패: {ex.Message}", Severity.Error); }
-        finally { _metaSaving = false; }
-    }
-
-    private async Task DeleteMetaAsync(ProjectMetaDto meta)
-    {
-        try
-        {
-            await ProjectApi.DeleteMetaAsync(meta.Id);
-            _metaProject?.Metas.Remove(meta);
-            Snackbar.Add("삭제되었습니다.", Severity.Success);
-        }
-        catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
-    }
-
-    private bool IsRevealed(long metaId) => _revealedIds.Contains(metaId);
-    private void ToggleReveal(long metaId) { if (!_revealedIds.Remove(metaId)) _revealedIds.Add(metaId); }
-
-    private async Task CopyToClipboard(string text)
-    {
-        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); Snackbar.Add("복사되었습니다.", Severity.Success); }
-        catch { Snackbar.Add("복사 실패", Severity.Warning); }
-    }
-
-    static string TruncateUrl(string url) => url.Length > 50 ? url[..47] + "..." : url;
-    static string MetaIcon(ProjectMetaType t) => t switch { ProjectMetaType.Url => Icons.Material.Filled.Link, ProjectMetaType.Version => Icons.Material.Filled.Tag, ProjectMetaType.Credential => Icons.Material.Filled.Key, _ => Icons.Material.Filled.Info };
-    static Color MetaColor(ProjectMetaType t) => t switch { ProjectMetaType.Url => Color.Info, ProjectMetaType.Version => Color.Success, ProjectMetaType.Credential => Color.Warning, _ => Color.Default };
-    static string MetaTypeLabel(ProjectMetaType t) => t.ToKorean();
-    static string MetaPlaceholder(ProjectMetaType t) => t switch { ProjectMetaType.Url => "기획서, Axure, Git 등", ProjectMetaType.Version => "API 버전, 앱 버전 등", ProjectMetaType.Credential => "테스트 계정, API Key 등", _ => "" };
 }

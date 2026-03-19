@@ -92,26 +92,28 @@ else
         </MudStack>
         @if (UrlMetas.Count > 0)
         {
-            <MudGrid Spacing="2">
-                @foreach (var meta in UrlMetas)
-                {
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudPaper Elevation="0" Class="pa-3" Style="border:1px solid var(--mud-palette-lines-default); border-radius:8px;">
-                            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@DetectUrlIcon(meta.Value)" Size="Size.Small" Color="@DetectUrlColor(meta.Value)" />
-                                <MudStack Spacing="0" Style="flex:1; min-width:0;">
-                                    <MudText Typo="Typo.body2" Style="font-weight:600;">@meta.Label</MudText>
-                                    <MudLink Href="@meta.Value" Target="_blank" Typo="Typo.caption" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;">
-                                        @TruncateUrl(meta.Value)
-                                    </MudLink>
-                                </MudStack>
-                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
-                                               OnClick="@(() => CopyToClipboard(meta.Value))" />
-                            </MudStack>
-                        </MudPaper>
-                    </MudItem>
-                }
-            </MudGrid>
+            <MudSimpleTable Dense Hover Elevation="0">
+                <thead><tr><th style="width:40px;"></th><th style="width:200px;">제목</th><th>링크</th><th style="width:80px;"></th></tr></thead>
+                <tbody>
+                    @foreach (var meta in UrlMetas)
+                    {
+                        <tr>
+                            <td><MudIcon Icon="@DetectUrlIcon(meta.Value)" Size="Size.Small" Color="@DetectUrlColor(meta.Value)" /></td>
+                            <td><MudText Typo="Typo.body2" Style="font-weight:600;">@meta.Label</MudText></td>
+                            <td>
+                                <MudLink Href="@meta.Value" Target="_blank" Underline="Underline.Hover" Typo="Typo.body2"
+                                         Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; max-width:500px;">
+                                    @TruncateUrl(meta.Value)
+                                </MudLink>
+                            </td>
+                            <td style="text-align:right;">
+                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" OnClick="@(() => CopyToClipboard(meta.Value))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteMetaAsync(meta.Id))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
         }
         @if (_addingMeta)
         {
@@ -135,26 +137,22 @@ else
                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@AllTodoLinks.Count</MudChip>
             </MudStack>
             <MudSimpleTable Dense Hover Elevation="0">
-                <thead>
-                    <tr>
-                        <th style="width:60px;">유형</th>
-                        <th style="width:200px;">할일</th>
-                        <th>링크</th>
-                    </tr>
-                </thead>
+                <thead><tr><th style="width:40px;"></th><th style="width:200px;">할일</th><th>링크</th><th style="width:40px;"></th></tr></thead>
                 <tbody>
                     @foreach (var (todo, link) in AllTodoLinks)
                     {
                         <tr>
-                            <td><MudChip T="string" Size="Size.Small" Color="@LinkTypeColor(link.LinkType)" Variant="Variant.Filled">@link.LinkType</MudChip></td>
+                            <td><MudIcon Icon="@DetectUrlIcon(link.Url)" Size="Size.Small" Color="@DetectUrlColor(link.Url)" /></td>
                             <td>
                                 <MudLink Href="@($"/todos/detail/{todo.Id}")" Underline="Underline.Hover" Typo="Typo.body2">@todo.Title</MudLink>
                             </td>
                             <td>
-                                <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover" Typo="Typo.body2">
+                                <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover" Typo="Typo.body2"
+                                         Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; max-width:500px;">
                                     @(string.IsNullOrWhiteSpace(link.Title) ? TruncateUrl(link.Url) : link.Title)
                                 </MudLink>
                             </td>
+                            <td><MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" OnClick="@(() => CopyToClipboard(link.Url))" /></td>
                         </tr>
                     }
                 </tbody>
@@ -177,7 +175,7 @@ else
                 <MudText Typo="Typo.caption" Style="font-weight:600;">@TodoCompletionPct.ToString("F0")%</MudText>
             }
         </MudStack>
-        @if (ActiveTodos.Count > 0)
+        @if (AllTodos.Count > 0)
         {
             <MudSimpleTable Dense Hover Style="border-radius:8px;">
                 <thead>
@@ -189,7 +187,7 @@ else
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var todo in ActiveTodos)
+                    @foreach (var todo in AllTodos)
                     {
                         var isOverdue = todo.DueDate.HasValue && todo.DueDate.Value.Date < DateTime.Today && todo.Status < TodoStatus.Done;
                         <tr class="dtl-list-item" style="cursor:pointer;" @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{todo.Id}"))">
@@ -293,6 +291,17 @@ else
         catch (Exception ex) { Snackbar.Add($"추가 실패: {ex.Message}", Severity.Error); }
     }
 
+    private async Task DeleteMetaAsync(long metaId)
+    {
+        try
+        {
+            await ProjectApi.DeleteMetaAsync(metaId);
+            _project = await ProjectApi.GetByIdAsync(Id);
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+    }
+
     // URL 기반 아이콘 자동감지
     static string DetectUrlIcon(string url)
     {
@@ -341,9 +350,8 @@ else
         ? (double)TodoDoneCount / TodoNonArchived * 100 : 0;
     private int OverdueCount => _todos.Count(t =>
         t.Status < TodoStatus.Done && t.DueDate.HasValue && t.DueDate.Value.Date < DateTime.Today);
-    private List<TodoItemDto> ActiveTodos => _todos
-        .Where(t => t.Status != TodoStatus.Archived && t.Status != TodoStatus.Done)
-        .OrderBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
+    private List<TodoItemDto> AllTodos => _todos
+        .OrderBy(t => t.Status).ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
 
     // 케이스 통계
     private int CaseOpenCount => _cases.Count(c => c.CaseStatus == CaseStatus.Open);

@@ -69,34 +69,34 @@ else
 {
     @* === CSS Grid 간트차트: 단일 스크롤 컨테이너 === *@
     <div class="gantt-scroll-container">
-            <div style="display:grid; grid-template-columns:220px @(TotalDays * _dayWidth)px; width:@(220 + TotalDays * _dayWidth)px; position:relative;">
+            <div style="display:grid; grid-template-columns:@(GanttDefaults.LeftColumnWidth)px @(TotalDays * _dayWidth)px; width:@(GanttDefaults.LeftColumnWidth + TotalDays * _dayWidth)px; position:relative;">
 
                 @* ── 헤더 행: 왼쪽 (작업명) ── *@
                 <div class="gantt-header-corner">
-                    <div style="height:24px; border-bottom:1px solid var(--mud-palette-lines-default);"></div>
-                    <div style="height:24px; display:flex; align-items:center; padding:0 12px; border-bottom:2px solid var(--mud-palette-lines-default); font-weight:600; font-size:13px;">작업명</div>
+                    <div style="height:@(GanttDefaults.HeaderRowHeight)px; border-bottom:1px solid var(--mud-palette-lines-default);"></div>
+                    <div style="height:@(GanttDefaults.HeaderRowHeight)px; display:flex; align-items:center; padding:0 12px; border-bottom:2px solid var(--mud-palette-lines-default); font-weight:600; font-size:13px;">작업명</div>
                 </div>
 
                 @* ── 헤더 행: 오른쪽 (월/일) ── *@
                 <div style="position:sticky; top:0; z-index:20; background:var(--mud-palette-surface);">
                     @* 월 헤더 *@
-                    <div style="display:flex; height:24px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <div style="display:flex; height:@(GanttDefaults.HeaderRowHeight)px; border-bottom:1px solid var(--mud-palette-lines-default);">
                         @foreach (var m in GetMonths())
                         {
-                            <div style="width:@(m.Days * _dayWidth)px; padding-left:6px; background:var(--mud-palette-background-gray); font-size:11px; font-weight:600; line-height:24px; border-right:1px solid var(--mud-palette-lines-default);">
+                            <div style="width:@(m.Days * _dayWidth)px; padding-left:6px; background:var(--mud-palette-background-gray); font-size:12px; font-weight:600; line-height:@(GanttDefaults.HeaderRowHeight)px; border-right:1px solid var(--mud-palette-lines-default);">
                                 @m.Label
                             </div>
                         }
                     </div>
                     @* 일 헤더 *@
-                    <div style="display:flex; height:24px; border-bottom:2px solid var(--mud-palette-lines-default);">
+                    <div style="display:flex; height:@(GanttDefaults.HeaderRowHeight)px; border-bottom:2px solid var(--mud-palette-lines-default);">
                         @for (var d = _viewStart; d <= _viewEnd; d = d.AddDays(1))
                         {
                             var isWeekend = d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
                             var isToday = d.Date == DateTime.UtcNow.Date;
                             var isHoliday = _holidaySet.Contains(d.Date);
                             var holidayName = isHoliday ? _holidayNames.GetValueOrDefault(d.Date) : null;
-                            <div style="width:@(_dayWidth)px; text-align:center; font-size:10px; line-height:24px; border-right:1px solid var(--mud-palette-table-lines); background:@(isToday ? "rgba(244,67,54,0.1)" : isHoliday ? "rgba(244,67,54,0.08)" : isWeekend ? "var(--mud-palette-action-default-hover)" : "transparent"); color:@(isToday ? "var(--mud-palette-error)" : isHoliday ? "var(--mud-palette-error)" : isWeekend ? "var(--mud-palette-text-disabled)" : "var(--mud-palette-text-secondary)"); font-weight:@(isToday || isHoliday ? "700" : "400");"
+                            <div style="width:@(_dayWidth)px; text-align:center; font-size:11px; line-height:@(GanttDefaults.HeaderRowHeight)px; border-right:1px solid var(--mud-palette-table-lines); background:@(isToday ? "rgba(244,67,54,0.1)" : isHoliday ? "rgba(244,67,54,0.08)" : isWeekend ? "var(--mud-palette-action-default-hover)" : "transparent"); color:@(isToday ? "var(--mud-palette-error)" : isHoliday ? "var(--mud-palette-error)" : isWeekend ? "var(--mud-palette-text-disabled)" : "var(--mud-palette-text-secondary)"); font-weight:@(isToday || isHoliday ? "700" : "400");"
                                  title="@(holidayName ?? "")">
                                 @d.Day
                             </div>
@@ -109,7 +109,7 @@ else
                 {
                     var isHeader = row.IsProjectHeader;
                     var hasDual = !isHeader && row.Item!.PlannedStartDate.HasValue && row.Item!.PlannedEndDate.HasValue;
-                    var h = isHeader ? 28 : (hasDual ? 40 : 28);
+                    var h = isHeader ? GanttDefaults.HeaderRowHeight : (hasDual ? GanttDefaults.DualBarRowHeight : GanttDefaults.SingleBarRowHeight);
 
                     @* 왼쪽 셀 (sticky left) *@
                     <div class="gantt-sticky-left" style="height:@(h)px; border-bottom:1px solid var(--mud-palette-lines-default);">
@@ -169,16 +169,16 @@ else
                                      title="@($"{item.Title} | 계획: {item.PlannedStartDate?.ToString("MM/dd")}~{item.PlannedEndDate?.ToString("MM/dd")} | 실제: {item.ActualStartDate?.ToString("MM/dd") ?? "-"}~{(item.ActualEndDate?.ToString("MM/dd") ?? "진행중")} | {item.ProgressPercent:F0}%{(item.IsDelayed ? $" | ⚠{item.DelayDays}일 지연" : "")}")"
                                      @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{item.Id}"))">
                                     @* 계획 바 (점선) *@
-                                    <div style="position:absolute; top:2px; left:@(pLeft2)px; width:@(pWidth2)px; height:16px; border-radius:4px; background:@(item.ProjectColor)30; border:1.5px dashed @(item.ProjectColor)80;"></div>
+                                    <div style="position:absolute; top:4px; left:@(pLeft2)px; width:@(pWidth2)px; height:@(GanttDefaults.PlannedBarHeight)px; border-radius:4px; background:@(item.ProjectColor)30; border:1.5px dashed @(item.ProjectColor)80;"></div>
                                     @* 실제 바 *@
-                                    <div style="position:absolute; top:21px; left:@(aLeft)px; width:@(aWidth)px; height:16px; border-radius:4px; background:@item.ProjectColor; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+                                    <div style="position:absolute; top:@(GanttDefaults.PlannedBarHeight + 8)px; left:@(aLeft)px; width:@(aWidth)px; height:@(GanttDefaults.ActualBarHeight)px; border-radius:4px; background:@item.ProjectColor; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
                                         @if (item.IsDelayed)
                                         {
-                                            <div style="position:absolute; right:-5px; top:-5px; width:10px; height:10px; border-radius:50%; background:var(--mud-palette-error); display:flex; align-items:center; justify-content:center;">
-                                                <span style="color:white; font-size:7px; font-weight:700;">!</span>
+                                            <div style="position:absolute; right:-5px; top:-5px; width:12px; height:12px; border-radius:50%; background:var(--mud-palette-error); display:flex; align-items:center; justify-content:center;">
+                                                <span style="color:white; font-size:8px; font-weight:700;">!</span>
                                             </div>
                                         }
-                                        <span style="color:white; font-size:10px; font-weight:500; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:16px;">@item.Title</span>
+                                        <span style="color:white; font-size:11px; font-weight:500; padding:0 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:@(GanttDefaults.ActualBarHeight)px;">@item.Title</span>
                                     </div>
                                 </div>
                             }
@@ -189,9 +189,9 @@ else
                                 <div class="gantt-row" style="height:100%; cursor:pointer;"
                                      title="@($"{item.Title} | {item.StartDate:MM/dd}~{item.EndDate:MM/dd} | {item.ProgressPercent:F0}%")"
                                      @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{item.Id}"))">
-                                    <div class="gantt-bar" style="position:absolute; top:4px; left:@(left)px; width:@(width)px; height:20px; border-radius:5px; background:@item.ProjectColor; display:flex; align-items:center; padding:0 6px; box-shadow:0 1px 3px rgba(0,0,0,0.15);">
+                                    <div class="gantt-bar" style="position:absolute; top:@((GanttDefaults.SingleBarRowHeight - GanttDefaults.SingleBarHeight) / 2)px; left:@(left)px; width:@(width)px; height:@(GanttDefaults.SingleBarHeight)px; border-radius:5px; background:@item.ProjectColor; display:flex; align-items:center; padding:0 6px; box-shadow:0 1px 3px rgba(0,0,0,0.15);">
                                         <div style="position:absolute; left:0; top:0; height:100%; width:@(item.ProgressPercent)%; background:rgba(255,255,255,0.3); border-radius:6px;"></div>
-                                        <span style="color:white; font-size:11px; font-weight:500; z-index:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.Title</span>
+                                        <span style="color:white; font-size:12px; font-weight:500; z-index:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.Title</span>
                                     </div>
                                 </div>
                             }
@@ -200,7 +200,7 @@ else
                 }
 
                 @* 배경 오버레이: 주말/공휴일/오늘선 (전체 데이터 영역 커버) *@
-                <div style="position:absolute; top:50px; left:220px; width:@(TotalDays * _dayWidth)px; height:@(TotalRowsHeight)px; pointer-events:none; z-index:0;">
+                <div style="position:absolute; top:@(GanttDefaults.HeaderRowHeight * 2)px; left:@(GanttDefaults.LeftColumnWidth)px; width:@(TotalDays * _dayWidth)px; height:@(TotalRowsHeight)px; pointer-events:none; z-index:0;">
                     @for (var d = _viewStart; d <= _viewEnd; d = d.AddDays(1))
                     {
                         var isWe = d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
@@ -247,7 +247,7 @@ else
 
     /// <summary>데이터 행 전체 높이 (배경 오버레이용)</summary>
     private int TotalRowsHeight => _rows.Sum(r =>
-        r.IsProjectHeader ? 28 : (r.Item!.PlannedStartDate.HasValue && r.Item!.PlannedEndDate.HasValue ? 40 : 28));
+        r.IsProjectHeader ? GanttDefaults.HeaderRowHeight : (r.Item!.PlannedStartDate.HasValue && r.Item!.PlannedEndDate.HasValue ? GanttDefaults.DualBarRowHeight : GanttDefaults.SingleBarRowHeight));
 
     protected override async Task OnInitializedAsync()
     {

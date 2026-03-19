@@ -12,7 +12,7 @@ public class WorkerService(AppDbContext db)
     public async Task<List<WorkerDto>> GetAllAsync(CancellationToken ct = default)
         => await db.Workers.OrderBy(w => w.SortOrder).Select(w => new WorkerDto
         {
-            Id = w.Id, Name = w.Name, Color = w.Color, SortOrder = w.SortOrder
+            Id = w.Id, Name = w.Name, Color = w.Color, IsMe = w.IsMe, SortOrder = w.SortOrder
         }).ToListAsync(ct);
 
     public async Task<WorkerDto> CreateAsync(CreateWorkerRequest req, CancellationToken ct = default)
@@ -22,6 +22,7 @@ public class WorkerService(AppDbContext db)
         {
             Name = req.Name,
             Color = req.Color,
+            IsMe = req.IsMe,
             SortOrder = maxOrder + 1,
             CreatedAt = DateTime.UtcNow
         };
@@ -36,6 +37,7 @@ public class WorkerService(AppDbContext db)
         if (entity is null) return null;
         entity.Name = req.Name;
         entity.Color = req.Color;
+        entity.IsMe = req.IsMe;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return entity.ToDto();

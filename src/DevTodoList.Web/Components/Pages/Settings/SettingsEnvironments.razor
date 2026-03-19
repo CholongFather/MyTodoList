@@ -1,0 +1,73 @@
+@page "/settings/environments"
+
+@inject EnvironmentApiClient EnvApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>배포 환경 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.Cloud" Color="Color.Info" />
+    <MudText Typo="Typo.h5">배포 환경 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudTextField T="string" @bind-Value="_newName" Label="환경 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" Placeholder="예: Dev, QA, Live" />
+        <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
+        <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
+    </MudStack>
+
+    <MudStack Row Spacing="1" Style="flex-wrap:wrap;">
+        @foreach (var env in _envs)
+        {
+            <MudChip T="string" Size="Size.Small" Style="@($"background:{env.Color}; color:white;")" OnClose="@(() => DeleteAsync(env.Id))">@env.Name</MudChip>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private List<EnvironmentDto> _envs = [];
+    private string _newName = "", _newColor = "";
+
+    private static readonly string[] _palette =
+    [
+        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
+        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800"
+    ];
+    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newColor = RandomColor();
+        try { _envs = await EnvApi.GetAllAsync(); } catch { }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        try
+        {
+            await EnvApi.CreateAsync(new CreateEnvironmentRequest { Name = _newName, Color = _newColor });
+            _newName = "";
+            _newColor = RandomColor();
+            _envs = await EnvApi.GetAllAsync();
+            Snackbar.Add("환경이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(long id)
+    {
+        try
+        {
+            await EnvApi.DeleteAsync(id);
+            _envs = await EnvApi.GetAllAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

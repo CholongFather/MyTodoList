@@ -13,6 +13,9 @@ public class WorkerEntity : EntityBase
     [MaxLength(10)]
     public string Color { get; set; } = "#9E9E9E";
 
+    /// <summary>true면 "나" (이 작업자가 포함된 할일 → 내 작업 자동 설정)</summary>
+    public bool IsMe { get; set; }
+
     public int SortOrder { get; set; }
 
     public ICollection<TodoWorkerEntity> TodoWorkers { get; set; } = [];

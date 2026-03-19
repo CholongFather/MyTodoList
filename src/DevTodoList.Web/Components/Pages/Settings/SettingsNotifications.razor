@@ -1,0 +1,53 @@
+@page "/settings/notifications"
+
+@inject SettingsApiClient SettingsApi
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>알림 설정</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.Notifications" Color="Color.Warning" />
+    <MudText Typo="Typo.h5">알림 설정</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    @if (_loading) { <MudProgressLinear Indeterminate /> }
+    else
+    {
+        <MudStack Spacing="3">
+            <MudSwitch @bind-Value="_noti.IsEnabled" Label="알림 활성화" Color="Color.Primary" />
+            <MudTextField @bind-Value="_noti.NotificationTime" Label="알림 시각 (HH:mm)" Variant="Variant.Outlined" />
+            <MudNumericField @bind-Value="_noti.DashboardRefreshIntervalSeconds" Label="대시보드 새로고침 간격 (초)" Variant="Variant.Outlined" Min="30" Max="3600" />
+            <MudNumericField @bind-Value="_noti.DueSoonDays" Label="마감 임박 알림 (N일 전)" Variant="Variant.Outlined" Min="1" Max="14" />
+            <MudTextField @bind-Value="_noti.GbisApiKey" Label="GBIS API 인증키 (공공데이터포털)" Variant="Variant.Outlined"
+                          Placeholder="공공데이터포털 발급 일반인증키" HelperText="경기도 버스도착정보 API용" />
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Teams 워크플로 URL</MudText>
+            <MudTextField @bind-Value="_noti.ScheduleWebhookUrl" Label="일정 알리미" Variant="Variant.Outlined"
+                          Placeholder="Power Automate Workflow URL" />
+            <MudTextField @bind-Value="_noti.BusWebhookUrl" Label="버스 알리미" Variant="Variant.Outlined"
+                          Placeholder="Power Automate Workflow URL" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">저장</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private NotificationSettingDto _noti = new();
+    private bool _loading = true, _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _noti = await SettingsApi.GetNotificationsAsync(); } catch { } finally { _loading = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try { await SettingsApi.UpdateNotificationsAsync(_noti); Snackbar.Add("저장되었습니다.", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+}

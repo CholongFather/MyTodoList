@@ -18,7 +18,7 @@
     else
     {
         <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
-            <thead><tr><th style="width:60px;">순서</th><th style="width:40px;">색상</th><th>이름</th><th style="width:80px;"></th></tr></thead>
+            <thead><tr><th style="width:60px;">순서</th><th style="width:40px;">색상</th><th>이름</th><th style="width:60px;">나</th><th style="width:120px;"></th></tr></thead>
             <tbody>
                 @for (var i = 0; i < _workers.Count; i++)
                 {
@@ -30,9 +30,32 @@
                             <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(idx == _workers.Count - 1)" OnClick="@(() => MoveAsync(idx, 1))" />
                         </td>
                         <td><div style="width:24px;height:24px;border-radius:50%;background:@w.Color;"></div></td>
-                        <td>@w.Name</td>
+                        <td>
+                            @if (_editingId == w.Id)
+                            {
+                                <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudTextField T="string" @bind-Value="_editName" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" />
+                                    <MudTextField T="string" @bind-Value="_editColor" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:80px;" />
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@_editColor;flex-shrink:0;"></div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" OnClick="@(() => SaveEditAsync(w))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelEdit" />
+                                </MudStack>
+                            }
+                            else
+                            {
+                                @w.Name
+                            }
+                        </td>
+                        <td>
+                            <MudCheckBox T="bool" Value="w.IsMe" ValueChanged="@(async (bool v) => await ToggleIsMeAsync(w, v))"
+                                         Color="Color.Primary" Dense />
+                        </td>
                         <td style="text-align:right;">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(w))" />
+                            @if (_editingId != w.Id)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default" OnClick="@(() => StartEdit(w))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(w))" />
+                            }
                         </td>
                     </tr>
                 }
@@ -51,8 +74,9 @@
 @code {
     private List<WorkerDto> _workers = [];
     private bool _loading = true;
-    private string _newName = "";
-    private string _newColor = "";
+    private string _newName = "", _newColor = "";
+    private long? _editingId;
+    private string _editName = "", _editColor = "";
 
     private static readonly string[] _palette =
     [
@@ -83,6 +107,33 @@
             _newColor = RandomColor();
             await LoadAsync();
             Snackbar.Add("작업자가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private void StartEdit(WorkerDto w) { _editingId = w.Id; _editName = w.Name; _editColor = w.Color; }
+    private void CancelEdit() => _editingId = null;
+
+    private async Task SaveEditAsync(WorkerDto w)
+    {
+        try
+        {
+            await WorkerApi.UpdateAsync(w.Id, new CreateWorkerRequest { Name = _editName, Color = _editColor, IsMe = w.IsMe });
+            w.Name = _editName;
+            w.Color = _editColor;
+            _editingId = null;
+            Snackbar.Add("수정되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ToggleIsMeAsync(WorkerDto w, bool val)
+    {
+        try
+        {
+            await WorkerApi.UpdateAsync(w.Id, new CreateWorkerRequest { Name = w.Name, Color = w.Color, IsMe = val });
+            w.IsMe = val;
+            Snackbar.Add(val ? $"'{w.Name}'이(가) 나로 설정됨" : $"'{w.Name}' 나 해제", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
     }

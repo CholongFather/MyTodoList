@@ -1,0 +1,141 @@
+@page "/settings/teams"
+
+@inject TeamApiClient TeamApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>팀 / 작업분류 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+    <MudText Typo="Typo.h5">팀 / 작업분류 관리</MudText>
+</MudStack>
+
+<MudPaper Class="dtl-section pa-4" Elevation="0">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudTextField T="string" @bind-Value="_newTeamName" Label="새 팀 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
+        <div style="width:28px;height:28px;border-radius:50%;background:@_newTeamColor;border:2px solid #ddd;flex-shrink:0;"></div>
+        <MudTextField T="string" @bind-Value="_newTeamColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddTeamAsync" Disabled="@string.IsNullOrWhiteSpace(_newTeamName)">팀 추가</MudButton>
+    </MudStack>
+
+    @foreach (var team in _teams)
+    {
+        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="@($"border-left:4px solid {team.Color}; background:var(--mud-palette-surface);")">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@team.Name</MudText>
+                @if (team.IsMine)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">내 팀</MudChip>
+                }
+                <MudSpacer />
+                <MudSwitch T="bool" Value="team.IsMine" ValueChanged="@(async (bool v) => await ToggleIsMyTeamAsync(team, v))"
+                           Color="Color.Primary" Size="Size.Small" Label="내 팀" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteTeamAsync(team.Id))" />
+            </MudStack>
+
+            <MudStack Row Spacing="1" Class="mb-1" Style="flex-wrap:wrap;">
+                @foreach (var cat in team.WorkCategories)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" OnClose="@(() => DeleteCategoryAsync(cat.Id))">@cat.Name</MudChip>
+                }
+            </MudStack>
+
+            <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+                <MudTextField T="string" @bind-Value="_newCategoryNames[team.Id]" Label="작업분류 추가" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:180px;" />
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Primary" OnClick="@(() => AddCategoryAsync(team.Id))" />
+            </MudStack>
+        </MudPaper>
+    }
+</MudPaper>
+
+@code {
+    private List<TeamDto> _teams = [];
+    private string _newTeamName = "", _newTeamColor = "";
+    private Dictionary<long, string> _newCategoryNames = new();
+
+    private static readonly string[] _palette =
+    [
+        "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3",
+        "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#FF9800",
+        "#FF5722", "#795548", "#607D8B", "#F44336", "#1976D2"
+    ];
+    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newTeamColor = RandomColor();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _teams = await TeamApi.GetAllAsync();
+            _newCategoryNames = _teams.ToDictionary(t => t.Id, _ => "");
+        }
+        catch { }
+    }
+
+    private async Task AddTeamAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newTeamName)) return;
+        try
+        {
+            await TeamApi.CreateAsync(new CreateTeamRequest { Name = _newTeamName, Color = _newTeamColor });
+            _newTeamName = "";
+            _newTeamColor = RandomColor();
+            await LoadAsync();
+            Snackbar.Add("팀이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ToggleIsMyTeamAsync(TeamDto team, bool isMine)
+    {
+        try
+        {
+            await TeamApi.UpdateAsync(team.Id, new CreateTeamRequest { Name = team.Name, Color = team.Color, IsMine = isMine });
+            await LoadAsync();
+            Snackbar.Add(isMine ? $"'{team.Name}'을(를) 내 팀으로 설정" : $"'{team.Name}' 내 팀 해제", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteTeamAsync(long teamId)
+    {
+        try
+        {
+            await TeamApi.DeleteAsync(teamId);
+            await LoadAsync();
+            Snackbar.Add("팀이 삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task AddCategoryAsync(long teamId)
+    {
+        if (!_newCategoryNames.TryGetValue(teamId, out var name) || string.IsNullOrWhiteSpace(name)) return;
+        try
+        {
+            await TeamApi.CreateCategoryAsync(teamId, new CreateWorkCategoryRequest { Name = name });
+            await LoadAsync();
+            Snackbar.Add("작업분류가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteCategoryAsync(long categoryId)
+    {
+        try
+        {
+            await TeamApi.DeleteCategoryAsync(categoryId);
+            await LoadAsync();
+            Snackbar.Add("작업분류가 삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

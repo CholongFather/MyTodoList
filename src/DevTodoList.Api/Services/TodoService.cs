@@ -286,7 +286,7 @@ public class TodoService(AppDbContext db)
         return true;
     }
 
-    /// <summary>작업자 즉시 동기화</summary>
+    /// <summary>작업자 즉시 동기화 + IsMe 기반 AssigneeType 자동 결정</summary>
     public async Task<bool> UpdateWorkersAsync(long id, List<long> workerIds, CancellationToken ct = default)
     {
         var entity = await db.TodoItems.Include(x => x.TodoWorkers).FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -294,6 +294,14 @@ public class TodoService(AppDbContext db)
         db.TodoWorkers.RemoveRange(entity.TodoWorkers);
         foreach (var workerId in workerIds)
             db.TodoWorkers.Add(new TodoWorkerEntity { TodoItemId = id, WorkerId = workerId });
+
+        // 작업자 중 IsMe=true인 작업자가 있으면 내 작업(0), 없으면 타인 작업(1)
+        if (workerIds.Count > 0)
+        {
+            var hasMe = await db.Workers.AnyAsync(w => workerIds.Contains(w.Id) && w.IsMe, ct);
+            entity.AssigneeType = hasMe ? 0 : 1;
+        }
+
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return true;

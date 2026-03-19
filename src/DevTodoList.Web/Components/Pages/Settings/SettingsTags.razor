@@ -1,0 +1,134 @@
+@page "/settings/tags"
+
+@inject TagApiClient TagApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>태그 관리</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.Label" Color="Color.Secondary" />
+    <MudText Typo="Typo.h5">태그 관리</MudText>
+</MudStack>
+
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    @if (_loading) { <MudProgressLinear Indeterminate /> }
+    else
+    {
+        <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
+            <thead><tr><th style="width:40px;">색상</th><th>이름</th><th style="width:120px;"></th></tr></thead>
+            <tbody>
+                @foreach (var tag in _tags)
+                {
+                    var t = tag;
+                    <tr>
+                        <td><div style="width:24px;height:24px;border-radius:50%;background:@t.Color;"></div></td>
+                        <td>
+                            @if (_editingId == t.Id)
+                            {
+                                <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudTextField T="string" @bind-Value="_editName" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" />
+                                    <MudTextField T="string" @bind-Value="_editColor" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:90px;" />
+                                    <div style="width:20px;height:20px;border-radius:50%;background:@_editColor;flex-shrink:0;"></div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" OnClick="@(() => SaveEditAsync(t))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelEdit" />
+                                </MudStack>
+                            }
+                            else
+                            {
+                                @t.Name
+                            }
+                        </td>
+                        <td style="text-align:right;">
+                            @if (_editingId != t.Id)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default" OnClick="@(() => StartEdit(t))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAsync(t))" />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+            <MudTextField T="string" @bind-Value="_newName" Label="태그 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
+            <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
+            <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private List<TagDto> _tags = [];
+    private bool _loading = true;
+    private string _newName = "", _newColor = "";
+    private long? _editingId;
+    private string _editName = "", _editColor = "";
+
+    private static readonly string[] _palette =
+    [
+        "#F44336", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5",
+        "#2196F3", "#03A9F4", "#00BCD4", "#009688", "#4CAF50",
+        "#8BC34A", "#CDDC39", "#FFC107", "#FF9800", "#FF5722",
+        "#795548", "#607D8B", "#9E9E9E", "#000000", "#37474F"
+    ];
+    private string RandomColor() => _palette[Random.Shared.Next(_palette.Length)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newColor = RandomColor();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _tags = await TagApi.GetAllAsync(); } catch { } finally { _loading = false; }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        try
+        {
+            var tag = await TagApi.CreateAsync(new CreateTagRequest { Name = _newName, Color = _newColor });
+            if (tag is not null) _tags.Add(tag);
+            _newName = "";
+            _newColor = RandomColor();
+            Snackbar.Add("태그가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private void StartEdit(TagDto tag) { _editingId = tag.Id; _editName = tag.Name; _editColor = tag.Color; }
+    private void CancelEdit() => _editingId = null;
+
+    private async Task SaveEditAsync(TagDto tag)
+    {
+        try
+        {
+            await TagApi.UpdateAsync(tag.Id, new CreateTagRequest { Name = _editName, Color = _editColor });
+            tag.Name = _editName;
+            tag.Color = _editColor;
+            _editingId = null;
+            Snackbar.Add("수정되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(TagDto tag)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("태그 삭제", $"'{tag.Name}'을(를) 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+        try
+        {
+            await TagApi.DeleteAsync(tag.Id);
+            _tags.Remove(tag);
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}
