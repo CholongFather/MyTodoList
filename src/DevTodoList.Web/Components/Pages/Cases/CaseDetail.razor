@@ -1,0 +1,588 @@
+@page "/cases/detail/{Id:long}"
+
+@inject CaseApiClient CaseApi
+@inject ProjectApiClient ProjectApi
+@inject EnvironmentApiClient EnvApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>케이스 상세</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate />
+}
+else if (_case is null)
+{
+    <MudText Typo="Typo.body1">케이스를 찾을 수 없습니다.</MudText>
+}
+else
+{
+    @* 상단 헤더 *@
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack" />
+        <MudText Typo="Typo.h5" Style="flex:1;">@_case.Title</MudText>
+        <MudChip T="string" Size="Size.Small" Color="@StatusColor(_case.CaseStatus)" Variant="Variant.Filled">@StatusText(_case.CaseStatus)</MudChip>
+    </MudStack>
+
+    @* 상태 변경 버튼 그룹 *@
+    <MudStack Row Spacing="1" Class="mb-4" Style="flex-wrap:wrap;">
+        @foreach (CaseStatus s in Enum.GetValues<CaseStatus>())
+        {
+            var status = s;
+            <MudButton Size="Size.Small"
+                       Variant="@(_case.CaseStatus == status ? Variant.Filled : Variant.Outlined)"
+                       Color="@StatusColor(status)"
+                       OnClick="() => ChangeStatusAsync(status)"
+                       Disabled="_statusChanging">@StatusText(status)</MudButton>
+        }
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                   OnClick="OpenEditDialog">수정</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.Delete" OnClick="ConfirmDeleteAsync">삭제</MudButton>
+    </MudStack>
+
+    <MudGrid Spacing="3">
+        @* 기본 정보 카드 *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4 dtl-section" Elevation="0">
+                <div class="dtl-section-header">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle2">기본 정보</MudText>
+                </div>
+                <MudSimpleTable Dense>
+                    <tbody>
+                        <tr>
+                            <td style="width:80px;"><MudText Typo="Typo.caption" Class="mud-text-secondary">카테고리</MudText></td>
+                            <td><MudText Typo="Typo.body2">@CategoryText(_case.CaseCategory)</MudText></td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">환경</MudText></td>
+                            <td>
+                                @if (_case.EnvironmentName is not null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Style="@(_case.EnvironmentColor is not null ? $"border-color:{_case.EnvironmentColor};color:{_case.EnvironmentColor}" : "")">@_case.EnvironmentName</MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">-</MudText>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">우선순위</MudText></td>
+                            <td><MudChip T="string" Size="Size.Small" Color="@PriorityColor(_case.Priority)" Variant="Variant.Filled">@PriorityText(_case.Priority)</MudChip></td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">보고자</MudText></td>
+                            <td><MudText Typo="Typo.body2">@(_case.Reporter ?? "-")</MudText></td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">담당자</MudText></td>
+                            <td><MudText Typo="Typo.body2">@(_case.Assignee ?? "-")</MudText></td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">프로젝트</MudText></td>
+                            <td><MudText Typo="Typo.body2">@(_case.ProjectName ?? "-")</MudText></td>
+                        </tr>
+                        <tr>
+                            <td><MudText Typo="Typo.caption" Class="mud-text-secondary">생성일</MudText></td>
+                            <td><MudText Typo="Typo.body2">@_case.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudText></td>
+                        </tr>
+                        @if (_case.ResolvedAt.HasValue)
+                        {
+                            <tr>
+                                <td><MudText Typo="Typo.caption" Class="mud-text-secondary">해결일</MudText></td>
+                                <td><MudText Typo="Typo.body2">@_case.ResolvedAt.Value.ToString("yyyy-MM-dd HH:mm")</MudText></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                @* 참고 링크 *@
+                <MudDivider Class="my-2" />
+                <div class="dtl-section-header" style="margin-bottom:4px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Color="Color.Info" />
+                    <MudText Typo="Typo.subtitle2" Style="flex:1;">참고 링크</MudText>
+                </div>
+                @foreach (var link in _case.Links)
+                {
+                    @if (_editingLinkId == link.Id)
+                    {
+                        <MudStack Row Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
+                            <MudTextField @bind-Value="_editLinkTitle" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
+                            <MudTextField @bind-Value="_editLinkUrl" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary" OnClick="() => SaveLinkEditAsync(link)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => _editingLinkId = null" />
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                            <MudIcon Icon="@DetectLinkIcon(link.Url)" Size="Size.Small" Color="@DetectLinkColor(link.Url)" />
+                            <MudLink Href="@link.Url" Target="_blank" Typo="Typo.body2" Color="Color.Info"
+                                     Style="word-break:break-all; flex:1;">@(string.IsNullOrEmpty(link.Title) ? link.Url : link.Title)</MudLink>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => StartEditLink(link)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="() => DeleteLinkAsync(link)" />
+                        </MudStack>
+                    }
+                }
+                @* 레거시 JiraUrl/WideUrl *@
+                @if (!string.IsNullOrEmpty(_case.JiraUrl) && !_case.Links.Any(l => l.Url == _case.JiraUrl))
+                {
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                        <MudIcon Icon="@Icons.Material.Filled.BugReport" Size="Size.Small" Color="Color.Info" />
+                        <MudLink Href="@_case.JiraUrl" Target="_blank" Typo="Typo.body2" Color="Color.Info"
+                                 Style="word-break:break-all; flex:1;">Jira 이슈</MudLink>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => ClearLegacyUrlAsync(nameof(_case.JiraUrl))" />
+                    </MudStack>
+                }
+                @if (!string.IsNullOrEmpty(_case.WideUrl) && !_case.Links.Any(l => l.Url == _case.WideUrl))
+                {
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Rocket" Size="Size.Small" Color="Color.Success" />
+                        <MudLink Href="@_case.WideUrl" Target="_blank" Typo="Typo.body2" Color="Color.Success"
+                                 Style="word-break:break-all; flex:1;">Wide 배포</MudLink>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => ClearLegacyUrlAsync(nameof(_case.WideUrl))" />
+                    </MudStack>
+                }
+                @* 링크 추가 폼 *@
+                <MudStack Row Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
+                    <MudTextField @bind-Value="_newLink.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
+                                   OnClick="AddLinkAsync" Disabled="@string.IsNullOrWhiteSpace(_newLink.Url)" />
+                </MudStack>
+
+                @* 설명 *@
+                @if (!string.IsNullOrEmpty(_case.Description))
+                {
+                    <MudDivider Class="my-3" />
+                    <div class="dtl-section-header" style="margin-bottom:8px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Default" />
+                        <MudText Typo="Typo.subtitle2">설명</MudText>
+                    </div>
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@_case.Description</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* 노트/가이드 섹션 *@
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4 dtl-section" Elevation="0">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="dtl-section-header" Style="margin-bottom:0;">
+                    <MudIcon Icon="@Icons.Material.Filled.StickyNote2" Color="Color.Warning" />
+                    <MudText Typo="Typo.subtitle2" Style="flex:1;">노트 / 가이드</MudText>
+                    <MudBadge Content="@_case.Notes.Count" Color="Color.Primary" Overlap Visible="@(_case.Notes.Count > 0)">
+                        <MudIcon Icon="@Icons.Material.Filled.StickyNote2" Size="Size.Small" />
+                    </MudBadge>
+                </MudStack>
+
+                @* 노트 목록 *@
+                @if (_case.Notes.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" Style="text-align:center;">노트가 없습니다.</MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="2" Class="mt-2">
+                        @foreach (var note in _case.Notes)
+                        {
+                            <MudPaper Elevation="0" Class="pa-3 dtl-list-item" Style="@GetNoteStyle(note.NoteType)">
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                                    <MudIcon Icon="@NoteTypeIcon(note.NoteType)" Size="Size.Small" Style="@GetNoteColorStyle(note.NoteType)" />
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Style="@GetNoteColorStyle(note.NoteType)">@NoteTypeText(note.NoteType)</MudChip>
+                                    @if (!string.IsNullOrEmpty(note.Author))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@note.Author</MudText>
+                                    }
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="flex:1;">@note.CreatedAt.ToString("MM/dd HH:mm")</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="() => StartEditNote(note)" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="() => DeleteNoteAsync(note)" />
+                                </MudStack>
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@note.Content</MudText>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+
+                @* 노트 입력 *@
+                <MudPaper Elevation="0" Class="pa-3 mt-3" Style="border-radius:8px; background:var(--mud-palette-background);">
+                    <MudStack Spacing="2">
+                        <MudSelect T="CaseNoteType" @bind-Value="_noteForm.NoteType" Label="유형" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" Style="max-width:160px;">
+                            @foreach (CaseNoteType nt in Enum.GetValues<CaseNoteType>()) { <MudSelectItem T="CaseNoteType" Value="nt">@nt.ToKorean()</MudSelectItem> }
+                        </MudSelect>
+                        <MudTextField @bind-Value="_noteForm.Content" Label="내용 (마크다운)" Lines="4"
+                                      Variant="Variant.Outlined" Placeholder="노트를 작성하세요..." />
+                        <MudStack Row Justify="Justify.FlexEnd">
+                            @if (_editingNoteId.HasValue)
+                            {
+                                <MudButton Size="Size.Small" OnClick="CancelNoteEdit">취소</MudButton>
+                            }
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="SaveNoteAsync" Disabled="_noteSaving"
+                                       StartIcon="@(_editingNoteId.HasValue ? Icons.Material.Filled.Save : Icons.Material.Filled.Add)">
+                                @(_editingNoteId.HasValue ? "수정" : "추가")
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@* 수정 다이얼로그 *@
+<MudDialog @bind-Visible="_editDialogVisible" Options="new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">케이스 수정</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pa-2">
+            <MudTextField @bind-Value="_editForm.Title" Label="제목" Required Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_editForm.Description" Label="설명" Lines="3" Variant="Variant.Outlined" />
+            <MudStack Row Spacing="2">
+                <MudSelect T="CaseCategory" @bind-Value="_editForm.CaseCategory" Label="카테고리" Variant="Variant.Outlined" Style="flex:1;">
+                    @foreach (CaseCategory cc in Enum.GetValues<CaseCategory>()) { <MudSelectItem T="CaseCategory" Value="cc">@cc.ToKorean()</MudSelectItem> }
+                </MudSelect>
+                <MudSelect T="long?" @bind-Value="_editForm.EnvironmentId" Label="환경" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var env in _environments)
+                    {
+                        <MudSelectItem T="long?" Value="env.Id">@env.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+            <MudStack Row Spacing="2">
+                <MudSelect T="int" @bind-Value="_editForm.Priority" Label="우선순위" Variant="Variant.Outlined" Style="flex:1;">
+                    <MudSelectItem T="int" Value="0">낮음</MudSelectItem>
+                    <MudSelectItem T="int" Value="1">보통</MudSelectItem>
+                    <MudSelectItem T="int" Value="2">높음</MudSelectItem>
+                    <MudSelectItem T="int" Value="3">심각</MudSelectItem>
+                </MudSelect>
+                <MudSelect T="long?" @bind-Value="_editForm.ProjectId" Label="프로젝트" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var p in _projects)
+                    {
+                        <MudSelectItem T="long?" Value="p.Id">@p.Id : @p.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+            <MudStack Row Spacing="2">
+                <MudTextField @bind-Value="_editForm.Reporter" Label="보고자" Variant="Variant.Outlined" Style="flex:1;" />
+                <MudTextField @bind-Value="_editForm.Assignee" Label="담당자" Variant="Variant.Outlined" Style="flex:1;" />
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _editDialogVisible = false">취소</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="UpdateCaseAsync" Disabled="_editSaving">저장</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private CaseDto? _case;
+    private List<ProjectDto> _projects = [];
+    private List<EnvironmentDto> _environments = [];
+    private bool _loading = true;
+    private bool _statusChanging;
+    private bool _noteSaving;
+    private bool _editDialogVisible;
+    private bool _editSaving;
+    private CreateCaseRequest _editForm = new();
+    private CreateCaseNoteRequest _noteForm = new() { Author = "hugo" };
+    private CreateLinkRequest _newLink = new();
+    private long? _editingNoteId;
+    private long? _editingLinkId;
+    private string _editLinkTitle = "";
+    private string _editLinkUrl = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _case = await CaseApi.GetByIdAsync(Id);
+            _projects = await ProjectApi.GetAllAsync();
+            _environments = await EnvApi.GetAllAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/cases");
+
+    private async Task ChangeStatusAsync(CaseStatus status)
+    {
+        if (_case is null || _case.CaseStatus == status) return;
+        _statusChanging = true;
+        try
+        {
+            var updated = await CaseApi.UpdateStatusAsync(Id, new UpdateCaseStatusRequest { Status = status });
+            if (updated is not null) _case = updated;
+            Snackbar.Add($"상태가 '{StatusText(status)}'로 변경되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"상태 변경 실패: {ex.Message}", Severity.Error); }
+        finally { _statusChanging = false; }
+    }
+
+    // === 케이스 수정 ===
+
+    private void OpenEditDialog()
+    {
+        if (_case is null) return;
+        _editForm = new CreateCaseRequest
+        {
+            Title = _case.Title,
+            Description = _case.Description,
+            CaseCategory = _case.CaseCategory,
+            EnvironmentId = _case.EnvironmentId,
+            Priority = _case.Priority,
+            Reporter = _case.Reporter,
+            Assignee = _case.Assignee,
+            JiraUrl = _case.JiraUrl,
+            WideUrl = _case.WideUrl,
+            ProjectId = _case.ProjectId
+        };
+        _editDialogVisible = true;
+    }
+
+    private async Task UpdateCaseAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editForm.Title)) { Snackbar.Add("제목을 입력하세요.", Severity.Warning); return; }
+        _editSaving = true;
+        try
+        {
+            var updated = await CaseApi.UpdateAsync(Id, _editForm);
+            if (updated is not null) _case = updated;
+            _editDialogVisible = false;
+            Snackbar.Add("수정되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"수정 실패: {ex.Message}", Severity.Error); }
+        finally { _editSaving = false; }
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        var result = await DialogService.ShowMessageBoxAsync("케이스 삭제", $"'{_case?.Title}' 케이스를 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (result == true)
+        {
+            try
+            {
+                await CaseApi.DeleteAsync(Id);
+                Snackbar.Add("삭제되었습니다.", Severity.Success);
+                Navigation.NavigateTo("/cases");
+            }
+            catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    // === 노트 CRUD ===
+
+    private async Task SaveNoteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_noteForm.Content)) { Snackbar.Add("내용을 입력하세요.", Severity.Warning); return; }
+        _noteSaving = true;
+        try
+        {
+            if (_editingNoteId.HasValue)
+            {
+                await CaseApi.UpdateNoteAsync(Id, _editingNoteId.Value, _noteForm);
+                Snackbar.Add("노트가 수정되었습니다.", Severity.Success);
+            }
+            else
+            {
+                await CaseApi.CreateNoteAsync(Id, _noteForm);
+                Snackbar.Add("노트가 추가되었습니다.", Severity.Success);
+            }
+            _noteForm = new() { Author = "hugo" };
+            _editingNoteId = null;
+            _case = await CaseApi.GetByIdAsync(Id);
+        }
+        catch (Exception ex) { Snackbar.Add($"노트 저장 실패: {ex.Message}", Severity.Error); }
+        finally { _noteSaving = false; }
+    }
+
+    private void StartEditNote(CaseNoteDto note)
+    {
+        _editingNoteId = note.Id;
+        _noteForm = new CreateCaseNoteRequest
+        {
+            Content = note.Content,
+            NoteType = note.NoteType,
+            Author = note.Author
+        };
+    }
+
+    private void CancelNoteEdit()
+    {
+        _editingNoteId = null;
+        _noteForm = new() { Author = "hugo" };
+    }
+
+    private async Task DeleteNoteAsync(CaseNoteDto note)
+    {
+        var result = await DialogService.ShowMessageBoxAsync("노트 삭제", "이 노트를 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (result == true)
+        {
+            try
+            {
+                await CaseApi.DeleteNoteAsync(Id, note.Id);
+                Snackbar.Add("노트가 삭제되었습니다.", Severity.Success);
+                _case = await CaseApi.GetByIdAsync(Id);
+            }
+            catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    // === 레거시 URL 삭제 ===
+
+    private async Task ClearLegacyUrlAsync(string field)
+    {
+        if (_case is null) return;
+        try
+        {
+            var req = new CreateCaseRequest
+            {
+                Title = _case.Title, Description = _case.Description,
+                CaseCategory = _case.CaseCategory, EnvironmentId = _case.EnvironmentId,
+                Priority = _case.Priority, Reporter = _case.Reporter,
+                Assignee = _case.Assignee, ProjectId = _case.ProjectId,
+                JiraUrl = field == nameof(_case.JiraUrl) ? null : _case.JiraUrl,
+                WideUrl = field == nameof(_case.WideUrl) ? null : _case.WideUrl
+            };
+            var updated = await CaseApi.UpdateAsync(Id, req);
+            if (updated is not null) _case = updated;
+            Snackbar.Add("링크가 삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+    }
+
+    // === 링크 CRUD ===
+
+    private async Task AddLinkAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newLink.Url)) return;
+        try
+        {
+            await CaseApi.CreateLinkAsync(Id, _newLink);
+            _newLink = new();
+            _case = await CaseApi.GetByIdAsync(Id);
+            Snackbar.Add("링크가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"링크 추가 실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteLinkAsync(CaseLinkDto link)
+    {
+        try
+        {
+            await CaseApi.DeleteLinkAsync(Id, link.Id);
+            _case = await CaseApi.GetByIdAsync(Id);
+            Snackbar.Add("링크가 삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"링크 삭제 실패: {ex.Message}", Severity.Error); }
+    }
+
+    private void StartEditLink(CaseLinkDto link)
+    {
+        _editingLinkId = link.Id;
+        _editLinkTitle = link.Title;
+        _editLinkUrl = link.Url;
+    }
+
+    private async Task SaveLinkEditAsync(CaseLinkDto link)
+    {
+        if (string.IsNullOrWhiteSpace(_editLinkUrl)) return;
+        try
+        {
+            await CaseApi.UpdateLinkAsync(Id, link.Id, new CreateLinkRequest { Title = _editLinkTitle, Url = _editLinkUrl });
+            _editingLinkId = null;
+            _case = await CaseApi.GetByIdAsync(Id);
+            Snackbar.Add("링크가 수정되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"수정 실패: {ex.Message}", Severity.Error); }
+    }
+
+    // === 헬퍼 ===
+
+    // URL 기반 아이콘/색상 자동감지
+    static string DetectLinkIcon(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return Icons.Material.Filled.Link;
+        var lower = url.ToLowerInvariant();
+        if (lower.Contains("jira") || lower.Contains("atlassian.net/browse")) return Icons.Material.Filled.BugReport;
+        if (lower.Contains("confluence") || lower.Contains("wiki")) return Icons.Material.Filled.MenuBook;
+        if (lower.Contains("github") || lower.Contains("gitlab")) return Icons.Material.Filled.Code;
+        if (lower.Contains("figma")) return Icons.Material.Filled.Brush;
+        if (lower.Contains("notion")) return Icons.Material.Filled.Description;
+        if (lower.Contains("axure") || lower.Contains("axshare")) return Icons.Material.Filled.DesignServices;
+        return Icons.Material.Filled.Link;
+    }
+
+    static Color DetectLinkColor(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return Color.Default;
+        var lower = url.ToLowerInvariant();
+        if (lower.Contains("jira") || lower.Contains("atlassian.net/browse")) return Color.Info;
+        if (lower.Contains("confluence") || lower.Contains("wiki")) return Color.Warning;
+        if (lower.Contains("github") || lower.Contains("gitlab")) return Color.Dark;
+        if (lower.Contains("figma")) return Color.Secondary;
+        if (lower.Contains("notion")) return Color.Default;
+        return Color.Default;
+    }
+
+    private static Color StatusColor(CaseStatus s) => s switch
+    {
+        CaseStatus.Open => Color.Error,
+        CaseStatus.InProgress => Color.Warning,
+        CaseStatus.Resolved => Color.Success,
+        CaseStatus.Closed => Color.Default,
+        _ => Color.Default
+    };
+
+    private static string StatusText(CaseStatus s) => s.ToKorean();
+
+    private static Color PriorityColor(int p) => p switch
+    {
+        3 => Color.Error, 2 => Color.Warning, 1 => Color.Info, _ => Color.Default
+    };
+
+    private static string PriorityText(int p) => p switch
+    {
+        3 => "심각", 2 => "높음", 1 => "보통", _ => "낮음"
+    };
+
+    private static string CategoryText(CaseCategory c) => c.ToKorean();
+
+    private static string NoteTypeIcon(CaseNoteType t) => t switch
+    {
+        CaseNoteType.Comment => Icons.Material.Filled.Comment,
+        CaseNoteType.Guide => Icons.Material.Filled.MenuBook,
+        CaseNoteType.Workaround => Icons.Material.Filled.Build,
+        CaseNoteType.RootCause => Icons.Material.Filled.FindInPage,
+        _ => Icons.Material.Filled.Note
+    };
+
+    private static string NoteTypeColor(CaseNoteType t) => CaseNoteColors.GetColor(t);
+
+    private static string GetNoteStyle(CaseNoteType t)
+        => $"border-left:3px solid {NoteTypeColor(t)};";
+
+    private static string GetNoteColorStyle(CaseNoteType t)
+        => $"color:{NoteTypeColor(t)}";
+
+    private static string NoteTypeText(CaseNoteType t) => t.ToKorean();
+
+    static string LinkIcon(LinkType t) => t switch { LinkType.Jira => Icons.Material.Filled.BugReport, LinkType.Confluence => Icons.Material.Filled.MenuBook, LinkType.GitHub or LinkType.GitLab => Icons.Material.Filled.Code, _ => Icons.Material.Filled.Link };
+    static Color LinkColor(LinkType t) => t switch { LinkType.Jira => Color.Info, LinkType.Confluence => Color.Warning, LinkType.GitHub or LinkType.GitLab => Color.Dark, _ => Color.Default };
+}

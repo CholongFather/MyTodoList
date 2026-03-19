@@ -1,0 +1,23 @@
+<div style="display:flex; flex-direction:column; height:100%;">
+    <MudNavMenu Color="Color.Primary" Class="pt-2" Style="flex:1;">
+        <div class="dtl-nav-group-label">개요</div>
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">대시보드</MudNavLink>
+
+        <div class="dtl-nav-group-label">업무 관리</div>
+        <MudNavLink Href="/projects" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderOpen">프로젝트</MudNavLink>
+        <MudNavLink Href="/todos" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.TaskAlt">할 일</MudNavLink>
+        <MudNavLink Href="/gantt" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ViewTimeline">간트 차트</MudNavLink>
+        <MudNavLink Href="/schedule" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CalendarMonth">일정 등록</MudNavLink>
+
+        <div class="dtl-nav-group-label">추적</div>
+        <MudNavLink Href="/cases" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.BugReport">케이스 트래커</MudNavLink>
+
+        <div class="dtl-nav-group-label">유틸리티</div>
+        <MudNavLink Href="/bus-commute" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.DirectionsBus">버스 알림</MudNavLink>
+        <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">설정</MudNavLink>
+    </MudNavMenu>
+
+    <div style="padding:12px 16px; text-align:center; border-top:1px solid rgba(255,255,255,0.1);">
+        <MudText Typo="Typo.caption" Style="color:rgba(255,255,255,0.35); font-size:11px;">v@(DevTodoList.Web.BuildInfo.Version)</MudText>
+    </div>
+</div>

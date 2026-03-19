@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DevTodoList.Shared\DevTodoList.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MudBlazor" Version="9.1.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- IIS DLL 잠금 해제: 빌드 초기에 app_offline.htm 배치 → ANCM이 dotnet.exe 종료 → 빌드 후 삭제 -->
+  <!-- IIS 물리 경로 = $(OutputPath) (bin/Debug/net9.0/) -->
+  <Target Name="IIS_StopBeforeBuild" BeforeTargets="PrepareForBuild">
+    <MakeDir Directories="$(OutputPath)" Condition="!Exists('$(OutputPath)')" />
+    <WriteLinesToFile File="$(OutputPath)app_offline.htm" Lines="&lt;!-- build in progress --&gt;" Overwrite="true" />
+    <Exec Command="curl -s http://localhost:5200/ -o NUL 2&gt;NUL || exit /b 0" IgnoreExitCode="true" StandardOutputImportance="low" Condition="'$(OS)' == 'Windows_NT'" />
+    <!-- InProcess 호스팅: w3wp.exe가 DLL 잠금. 파일 잠금 해제 대기 (최대 10초) -->
+    <Exec Command="powershell -NoProfile -Command &quot;%24dll='$(OutputPath)DevTodoList.Web.dll'; for (%24i=0; %24i -lt 20; %24i++) { try { if (Test-Path %24dll) { [IO.File]::Open(%24dll,'Open','Write','None').Close(); break } else { break } } catch { Start-Sleep -Milliseconds 500 } }&quot;" IgnoreExitCode="true" StandardOutputImportance="low" Condition="'$(OS)' == 'Windows_NT'" />
+  </Target>
+  <Target Name="IIS_StartAfterBuild" AfterTargets="Build">
+    <Delete Files="$(OutputPath)app_offline.htm" />
+  </Target>
+
+</Project>

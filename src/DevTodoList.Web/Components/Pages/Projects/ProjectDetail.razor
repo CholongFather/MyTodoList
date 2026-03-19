@@ -1,0 +1,383 @@
+@page "/projects/{Id:long}"
+
+@inject ProjectApiClient ProjectApi
+@inject TodoApiClient TodoApi
+@inject CaseApiClient CaseApi
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>프로젝트 상세</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate />
+}
+else if (_project is null)
+{
+    <MudText Typo="Typo.body1">프로젝트를 찾을 수 없습니다.</MudText>
+}
+else
+{
+    @* 헤더 *@
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/projects"))" />
+        <MudAvatar Size="Size.Medium" Style="@($"background:{_project.Color}; color:white;")">
+            <MudIcon Icon="@Icons.Material.Filled.Folder" />
+        </MudAvatar>
+        <MudText Typo="Typo.h5" Style="flex:1;">@_project.Name</MudText>
+        @if (_project.IsArchived)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">보관됨</MudChip>
+        }
+    </MudStack>
+
+    @* 프로젝트 개요 *@
+    <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0" Style="@($"border-top:4px solid {_project.Color};")">
+        @if (!string.IsNullOrEmpty(_project.Description))
+        {
+            <MudText Typo="Typo.body2" Class="mb-3" Style="white-space:pre-wrap;">@_project.Description</MudText>
+        }
+        @if (InfoMetas.Count > 0)
+        {
+            <MudSimpleTable Dense>
+                <tbody>
+                    @foreach (var meta in InfoMetas)
+                    {
+                        <tr>
+                            <td style="width:100px;">
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@MetaIcon(meta.MetaType)" Size="Size.Small" Color="@MetaColor(meta.MetaType)" />
+                                    <MudText Typo="Typo.caption" Style="font-weight:500;">@meta.Label</MudText>
+                                </MudStack>
+                            </td>
+                            <td>
+                                @if (meta.MetaType == ProjectMetaType.Credential)
+                                {
+                                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.body2" Style="font-family:monospace;">
+                                            @(IsRevealed(meta.Id) ? meta.Value : "********")
+                                        </MudText>
+                                        <MudIconButton Icon="@(IsRevealed(meta.Id) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                                       Size="Size.Small" OnClick="@(() => ToggleReveal(meta.Id))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       OnClick="@(() => CopyToClipboard(meta.Value))" />
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.body2">@meta.Value</MudText>
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       OnClick="@(() => CopyToClipboard(meta.Value))" />
+                                    </MudStack>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">생성일: @_project.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+    </MudPaper>
+
+    @* 업무 참조 *@
+    <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.Bookmarks" Color="Color.Info" />
+            <MudText Typo="Typo.subtitle1" Style="font-weight:600; flex:1;">업무 참조</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@UrlMetas.Count</MudChip>
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Primary"
+                           OnClick="() => _addingMeta = true" />
+        </MudStack>
+        @if (UrlMetas.Count > 0)
+        {
+            <MudGrid Spacing="2">
+                @foreach (var meta in UrlMetas)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0" Class="pa-3" Style="border:1px solid var(--mud-palette-lines-default); border-radius:8px;">
+                            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@DetectUrlIcon(meta.Value)" Size="Size.Small" Color="@DetectUrlColor(meta.Value)" />
+                                <MudStack Spacing="0" Style="flex:1; min-width:0;">
+                                    <MudText Typo="Typo.body2" Style="font-weight:600;">@meta.Label</MudText>
+                                    <MudLink Href="@meta.Value" Target="_blank" Typo="Typo.caption" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;">
+                                        @TruncateUrl(meta.Value)
+                                    </MudLink>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                               OnClick="@(() => CopyToClipboard(meta.Value))" />
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        @if (_addingMeta)
+        {
+            <MudStack Row Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudTextField @bind-Value="_newMetaLabel" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
+                <MudTextField @bind-Value="_newMetaUrl" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                <MudIconButton Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary"
+                               OnClick="AddMetaAsync" Disabled="@(string.IsNullOrWhiteSpace(_newMetaLabel) || string.IsNullOrWhiteSpace(_newMetaUrl))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => _addingMeta = false" />
+            </MudStack>
+        }
+    </MudPaper>
+
+    @* 할일 링크 모아보기 *@
+    @if (AllTodoLinks.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Link" Color="Color.Warning" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600; flex:1;">할일 링크 모아보기</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@AllTodoLinks.Count</MudChip>
+            </MudStack>
+            <MudSimpleTable Dense Hover Elevation="0">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">유형</th>
+                        <th style="width:200px;">할일</th>
+                        <th>링크</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (todo, link) in AllTodoLinks)
+                    {
+                        <tr>
+                            <td><MudChip T="string" Size="Size.Small" Color="@LinkTypeColor(link.LinkType)" Variant="Variant.Filled">@link.LinkType</MudChip></td>
+                            <td>
+                                <MudLink Href="@($"/todos/detail/{todo.Id}")" Underline="Underline.Hover" Typo="Typo.body2">@todo.Title</MudLink>
+                            </td>
+                            <td>
+                                <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover" Typo="Typo.body2">
+                                    @(string.IsNullOrWhiteSpace(link.Title) ? TruncateUrl(link.Url) : link.Title)
+                                </MudLink>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+
+    @* 할일 목록 *@
+    <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.CheckBox" />
+            <MudText Typo="Typo.subtitle1" Style="font-weight:600; flex:1;">할일 목록</MudText>
+            <MudStack Row Spacing="1" Style="flex-wrap:wrap;">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Filled">Todo @TodoTodoCount</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled">진행중 @TodoInProgressCount</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">완료 @TodoDoneCount</MudChip>
+            </MudStack>
+            @if (TodoNonArchived > 0)
+            {
+                <MudText Typo="Typo.caption" Style="font-weight:600;">@TodoCompletionPct.ToString("F0")%</MudText>
+            }
+        </MudStack>
+        @if (ActiveTodos.Count > 0)
+        {
+            <MudSimpleTable Dense Hover Style="border-radius:8px;">
+                <thead>
+                    <tr>
+                        <th style="width:24px;"></th>
+                        <th>제목</th>
+                        <th style="width:70px;">상태</th>
+                        <th style="width:70px;">마감일</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var todo in ActiveTodos)
+                    {
+                        var isOverdue = todo.DueDate.HasValue && todo.DueDate.Value.Date < DateTime.Today && todo.Status < TodoStatus.Done;
+                        <tr class="dtl-list-item" style="cursor:pointer;" @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{todo.Id}"))">
+                            <td><MudIcon Icon="@PriorityIcon(todo.Priority)" Size="Size.Small" Color="@PriorityColor(todo.Priority)" /></td>
+                            <td><MudText Typo="Typo.body2" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px;">@todo.Title</MudText></td>
+                            <td><MudChip T="string" Size="Size.Small" Color="@TodoStatusColor(todo.Status)" Variant="Variant.Filled">@TodoStatusText(todo.Status)</MudChip></td>
+                            <td>
+                                @if (todo.DueDate.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="@(isOverdue ? Color.Error : Color.Default)">@todo.DueDate.Value.ToString("MM-dd")</MudText>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="text-align:center;">진행 중인 할일이 없습니다.</MudText>
+        }
+    </MudPaper>
+
+    @* 케이스 목록 *@
+    @if (_cases.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4 dtl-section" Elevation="0">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.BugReport" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600; flex:1;">케이스</MudText>
+                <MudStack Row Spacing="1" Style="flex-wrap:wrap;">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Open @CaseOpenCount</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">진행중 @CaseInProgressCount</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">해결 @CaseResolvedCount</MudChip>
+                </MudStack>
+            </MudStack>
+            <MudSimpleTable Dense Hover Style="border-radius:8px;">
+                <thead><tr><th>제목</th><th style="width:70px;">상태</th><th style="width:80px;">카테고리</th><th style="width:70px;">등록일</th></tr></thead>
+                <tbody>
+                    @foreach (var c in ActiveCases)
+                    {
+                        <tr class="dtl-list-item" style="cursor:pointer;" @onclick="@(() => Navigation.NavigateTo($"/cases/detail/{c.Id}"))">
+                            <td><MudText Typo="Typo.body2" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px;">@c.Title</MudText></td>
+                            <td><MudChip T="string" Size="Size.Small" Color="@CaseStatusColor(c.CaseStatus)" Variant="Variant.Filled">@CaseStatusText(c.CaseStatus)</MudChip></td>
+                            <td><MudText Typo="Typo.caption">@CategoryText(c.CaseCategory)</MudText></td>
+                            <td><MudText Typo="Typo.caption">@c.CreatedAt.ToString("MM-dd")</MudText></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private ProjectDto? _project;
+    private List<TodoItemDto> _todos = [];
+    private List<CaseDto> _cases = [];
+    private bool _loading = true;
+    private HashSet<long> _revealedIds = [];
+    private bool _addingMeta;
+    private string _newMetaLabel = "";
+    private string _newMetaUrl = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            // 병렬 fetch
+            var projectTask = ProjectApi.GetByIdAsync(Id);
+            var todoTask = TodoApi.GetAllAsync(projectId: Id);
+            var caseTask = CaseApi.GetAllAsync(projectId: Id);
+            await Task.WhenAll(projectTask, todoTask, caseTask);
+
+            _project = projectTask.Result;
+            _todos = todoTask.Result ?? [];
+            _cases = caseTask.Result ?? [];
+        }
+        catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task AddMetaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newMetaLabel) || string.IsNullOrWhiteSpace(_newMetaUrl)) return;
+        try
+        {
+            await ProjectApi.CreateMetaAsync(Id, new CreateProjectMetaRequest
+            {
+                MetaType = ProjectMetaType.Url,
+                Label = _newMetaLabel,
+                Value = _newMetaUrl
+            });
+            _newMetaLabel = ""; _newMetaUrl = ""; _addingMeta = false;
+            _project = await ProjectApi.GetByIdAsync(Id);
+            Snackbar.Add("참조 링크가 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"추가 실패: {ex.Message}", Severity.Error); }
+    }
+
+    // URL 기반 아이콘 자동감지
+    static string DetectUrlIcon(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return Icons.Material.Filled.Link;
+        var lower = url.ToLowerInvariant();
+        if (lower.Contains("figma")) return Icons.Material.Filled.Brush;
+        if (lower.Contains("notion")) return Icons.Material.Filled.Description;
+        if (lower.Contains("axure") || lower.Contains("axshare")) return Icons.Material.Filled.DesignServices;
+        if (lower.Contains("jira") || lower.Contains("atlassian.net/browse")) return Icons.Material.Filled.BugReport;
+        if (lower.Contains("confluence") || lower.Contains("wiki")) return Icons.Material.Filled.MenuBook;
+        if (lower.Contains("github") || lower.Contains("gitlab")) return Icons.Material.Filled.Code;
+        return Icons.Material.Filled.Link;
+    }
+
+    static Color DetectUrlColor(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return Color.Info;
+        var lower = url.ToLowerInvariant();
+        if (lower.Contains("figma")) return Color.Secondary;
+        if (lower.Contains("jira") || lower.Contains("atlassian.net/browse")) return Color.Info;
+        if (lower.Contains("confluence") || lower.Contains("wiki")) return Color.Warning;
+        if (lower.Contains("github") || lower.Contains("gitlab")) return Color.Dark;
+        return Color.Info;
+    }
+
+    // 메타 분류
+    private List<ProjectMetaDto> UrlMetas => _project?.Metas
+        .Where(m => m.MetaType == ProjectMetaType.Url).OrderBy(m => m.SortOrder).ToList() ?? [];
+    private List<ProjectMetaDto> InfoMetas => _project?.Metas
+        .Where(m => m.MetaType != ProjectMetaType.Url).OrderBy(m => m.SortOrder).ToList() ?? [];
+
+    // 할일 링크 모아보기
+    private List<(TodoItemDto Todo, TodoLinkDto Link)> AllTodoLinks => _todos
+        .SelectMany(t => t.Links.Select(l => (t, l)))
+        .OrderBy(x => x.l.LinkType.ToString())
+        .ThenBy(x => x.t.Title)
+        .ToList();
+
+    // TODO 통계
+    private int TodoTodoCount => _todos.Count(t => t.Status == TodoStatus.Todo);
+    private int TodoInProgressCount => _todos.Count(t => t.Status == TodoStatus.InProgress);
+    private int TodoDoneCount => _todos.Count(t => t.Status == TodoStatus.Done);
+    private int TodoArchivedCount => _todos.Count(t => t.Status == TodoStatus.Archived);
+    private int TodoNonArchived => _todos.Count - TodoArchivedCount;
+    private double TodoCompletionPct => TodoNonArchived > 0
+        ? (double)TodoDoneCount / TodoNonArchived * 100 : 0;
+    private int OverdueCount => _todos.Count(t =>
+        t.Status < TodoStatus.Done && t.DueDate.HasValue && t.DueDate.Value.Date < DateTime.Today);
+    private List<TodoItemDto> ActiveTodos => _todos
+        .Where(t => t.Status != TodoStatus.Archived && t.Status != TodoStatus.Done)
+        .OrderBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
+
+    // 케이스 통계
+    private int CaseOpenCount => _cases.Count(c => c.CaseStatus == CaseStatus.Open);
+    private int CaseInProgressCount => _cases.Count(c => c.CaseStatus == CaseStatus.InProgress);
+    private int CaseResolvedCount => _cases.Count(c => c.CaseStatus == CaseStatus.Resolved);
+    private int CaseClosedCount => _cases.Count(c => c.CaseStatus == CaseStatus.Closed);
+    private List<CaseDto> ActiveCases => _cases
+        .Where(c => c.CaseStatus != CaseStatus.Closed)
+        .OrderByDescending(c => c.CreatedAt).ToList();
+
+    // 메타 헬퍼
+    private bool IsRevealed(long metaId) => _revealedIds.Contains(metaId);
+    private void ToggleReveal(long metaId) { if (!_revealedIds.Remove(metaId)) _revealedIds.Add(metaId); }
+    private async Task CopyToClipboard(string text)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); Snackbar.Add("복사되었습니다.", Severity.Success); }
+        catch { Snackbar.Add("복사 실패", Severity.Warning); }
+    }
+
+    static string TruncateUrl(string url) => url.Length > 60 ? url[..57] + "..." : url;
+    static string MetaIcon(ProjectMetaType t) => t switch { ProjectMetaType.Url => Icons.Material.Filled.Link, ProjectMetaType.Version => Icons.Material.Filled.Tag, ProjectMetaType.Credential => Icons.Material.Filled.Key, _ => Icons.Material.Filled.Info };
+    static Color MetaColor(ProjectMetaType t) => t switch { ProjectMetaType.Url => Color.Info, ProjectMetaType.Version => Color.Success, ProjectMetaType.Credential => Color.Warning, _ => Color.Default };
+
+    // TODO 헬퍼
+    static Color TodoStatusColor(TodoStatus s) => s switch { TodoStatus.Todo => Color.Default, TodoStatus.InProgress => Color.Info, TodoStatus.Done => Color.Success, TodoStatus.Archived => Color.Default, _ => Color.Default };
+    static string TodoStatusText(TodoStatus s) => s.ToKorean();
+    static Color PriorityColor(TodoPriority p) => p switch { TodoPriority.Urgent => Color.Error, TodoPriority.High => Color.Warning, TodoPriority.Normal => Color.Info, _ => Color.Default };
+    static string PriorityIcon(TodoPriority p) => p switch { TodoPriority.Urgent => Icons.Material.Filled.ErrorOutline, TodoPriority.High => Icons.Material.Filled.PriorityHigh, _ => Icons.Material.Filled.Circle };
+
+    // 링크 유형 색상
+    static Color LinkTypeColor(LinkType t) => t switch { LinkType.Jira => Color.Info, LinkType.Confluence => Color.Warning, LinkType.GitHub or LinkType.GitLab => Color.Dark, _ => Color.Default };
+
+    // 케이스 헬퍼
+    static Color CaseStatusColor(CaseStatus s) => s switch { CaseStatus.Open => Color.Error, CaseStatus.InProgress => Color.Warning, CaseStatus.Resolved => Color.Success, CaseStatus.Closed => Color.Default, _ => Color.Default };
+    static string CaseStatusText(CaseStatus s) => s.ToKorean();
+    static string CategoryText(CaseCategory c) => c.ToKorean();
+}

@@ -1,0 +1,80 @@
+@* 재사용 가능한 검색 가능 셀렉트 컴포넌트 *@
+@typeparam TItem
+@typeparam TValue
+
+<MudAutocomplete T="TValue"
+    Value="Value"
+    ValueChanged="OnValueChanged"
+    SearchFunc="SearchFunc"
+    ToStringFunc="ToStringFunc"
+    Label="@Label"
+    Variant="@Variant"
+    Margin="@Margin"
+    Dense="@Dense"
+    Clearable="@Clearable"
+    Style="@Style"
+    Class="@Class"
+    AnchorOrigin="Origin.BottomCenter"
+    ResetValueOnEmptyText="@Clearable"
+    CoerceText="false"
+    CoerceValue="false"
+    ShowProgressIndicator="false"
+    DebounceInterval="150"
+    MaxItems="50" />
+
+@code {
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue?> ValueChanged { get; set; }
+    [Parameter] public List<TItem> Items { get; set; } = [];
+    [Parameter] public Func<TItem, TValue> ValueSelector { get; set; } = default!;
+    [Parameter] public Func<TItem, string> TextSelector { get; set; } = default!;
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public Variant Variant { get; set; } = Variant.Outlined;
+    [Parameter] public Margin Margin { get; set; } = Margin.Dense;
+    [Parameter] public bool Dense { get; set; } = true;
+    [Parameter] public bool Clearable { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private async Task OnValueChanged(TValue? value)
+    {
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    /// <summary>검색 텍스트로 항목 필터링. 현재 선택값과 일치 시 전체 반환</summary>
+    private Task<IEnumerable<TValue>> SearchFunc(string? searchText, CancellationToken ct)
+    {
+        IEnumerable<TItem> filtered;
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filtered = Items;
+        }
+        else
+        {
+            // 현재 선택된 항목의 텍스트와 검색어가 일치하면 전체 반환
+            var currentItem = Items.FirstOrDefault(x =>
+                EqualityComparer<TValue>.Default.Equals(ValueSelector(x), Value));
+            if (currentItem is not null && TextSelector(currentItem) == searchText)
+            {
+                filtered = Items;
+            }
+            else
+            {
+                filtered = Items.Where(x =>
+                    TextSelector(x).Contains(searchText, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        return Task.FromResult(filtered.Select(x => ValueSelector(x)));
+    }
+
+    private string? ToStringFunc(TValue? value)
+    {
+        if (value is null) return null;
+        var item = Items.FirstOrDefault(x =>
+            EqualityComparer<TValue>.Default.Equals(ValueSelector(x), value));
+        return item is not null ? TextSelector(item) : value?.ToString();
+    }
+}

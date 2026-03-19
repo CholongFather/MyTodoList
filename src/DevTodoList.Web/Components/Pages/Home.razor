@@ -1,0 +1,588 @@
+@page "/"
+
+@inject DashboardApiClient DashboardApi
+@inject TodoApiClient TodoApi
+@inject ProjectApiClient ProjectApi
+@inject TeamApiClient TeamApi
+@inject IHttpClientFactory HttpFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject SettingsApiClient SettingApi
+@inject AssigneeTypeApiClient AssigneeTypeApi
+
+@implements IDisposable
+
+<PageTitle>대시보드</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate Class="mb-6" />
+}
+else
+{
+    @* 빠른 추가 *@
+    <MudPaper Class="pa-4 mb-3 dtl-section dtl-quick-add" Elevation="0">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.FlashOn" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Style="font-weight:600;">빠른 할일 추가</MudText>
+        </MudStack>
+        <MudStack Row Spacing="3" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="_quickTitle" Label="할일 제목" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Style="flex:2;" OnKeyDown="OnQuickAddKeyDown" />
+            <SearchableSelect TItem="ProjectDto" TValue="long"
+                Items="_projects" ValueSelector="@(p => p.Id)" TextSelector="@(p => p.Name)"
+                @bind-Value="_quickProjectId" Label="프로젝트" Style="min-width:180px;" />
+            <MudDatePicker @bind-Date="_quickDueDate" Label="마감일" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           DateFormat="yyyy-MM-dd" Style="min-width:160px;" />
+            <SearchableSelect TItem="TeamDto" TValue="long?"
+                Items="_teams" ValueSelector="@(t => (long?)t.Id)" TextSelector="@(t => t.Name)"
+                @bind-Value="_quickTeamId" @bind-Value:after="OnQuickTeamChanged" Label="팀" Clearable Style="min-width:130px;" />
+            <MudSelect T="long?" @bind-Value="_quickAssigneeTypeId" Label="담당" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:100px;" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var at in _assigneeTypes) { <MudSelectItem T="long?" Value="at.Id">@at.Name</MudSelectItem> }
+            </MudSelect>
+            <MudCheckBox T="bool" Value="_quickIsExternal" ValueChanged="OnQuickExternalChanged" Label="외부" Color="Color.Dark" Dense />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="QuickAddAsync"
+                       Disabled="@(string.IsNullOrWhiteSpace(_quickTitle) || _quickSubmitting)"
+                       StartIcon="@Icons.Material.Filled.Add">추가</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @* 통계 카드 *@
+    <MudPaper Class="pa-4 mb-3 dtl-section" Elevation="0">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="dtl-stat-card dtl-stat-card--primary" Elevation="0"
+                      @onclick="GoToTodos">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.Assignment" />
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">전체 작업</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@_dashboard.TotalCount</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="dtl-stat-card dtl-stat-card--info" Elevation="0"
+                      @onclick="GoToTodos">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="Color.Info" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.PlayArrow" />
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">진행중</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@GetStatusCount("InProgress")</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="dtl-stat-card dtl-stat-card--success" Elevation="0">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="Color.Success" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">완료율</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@_dashboard.CompletionRate%</MudText>
+                    </MudStack>
+                </MudStack>
+                <MudProgressLinear Value="@_dashboard.CompletionRate" Color="Color.Success" Size="Size.Small" Rounded Class="mt-2" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="dtl-stat-card dtl-stat-card--error" Elevation="0"
+                      @onclick="GoToTodos">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="@(_dashboard.OverdueTodos.Count > 0 ? Color.Error : Color.Default)" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" />
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">내 지연</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;" Color="@(_dashboard.OverdueTodos.Count > 0 ? Color.Error : Color.Default)">
+                            @_dashboard.OverdueTodos.Count
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="dtl-stat-card dtl-stat-card--warning" Elevation="0"
+                      @onclick="GoToTodos">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="@((_dashboard?.OthersOverdueCount ?? 0) > 0 ? Color.Warning : Color.Default)" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" />
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">타인 작업 지연</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;" Color="@((_dashboard?.OthersOverdueCount ?? 0) > 0 ? Color.Warning : Color.Default)">
+                            @(_dashboard?.OthersOverdueCount ?? 0)
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+    </MudPaper>
+
+    @* 내 작업 섹션 *@
+    <MudPaper Class="pa-4 mb-3 dtl-section" Elevation="0">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+        <MudText Typo="Typo.h6" Style="font-weight:600;">내 작업</MudText>
+    </MudStack>
+    <MudGrid Spacing="3">
+        @* 오늘 할 일 (내 작업) *@
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 dtl-section" Elevation="0" Style="min-height:300px;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="dtl-section-header" Style="cursor:pointer;" @onclick="GoToTodos">
+                    <MudIcon Icon="@Icons.Material.Filled.Today" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6" Style="font-weight:600;">오늘 할 일</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@_dashboard.MyTodayTodos.Count</MudChip>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" Class="mud-text-secondary" />
+                </MudStack>
+                @if (_dashboard.MyTodayTodos.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense Variant="Variant.Text">오늘 예정된 작업이 없습니다.</MudAlert>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var todo in _dashboard.MyTodayTodos)
+                        {
+                            <MudPaper Class="pa-3 dtl-list-item" Elevation="0"
+                                      @onclick="@(() => GoToDetail(todo.Id))">
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                    <div class="dtl-color-bar" style="height:36px; background:@todo.ProjectColor;"></div>
+                                    <MudStack Spacing="0" Style="flex:1; min-width:0;">
+                                        <MudText Typo="Typo.body1" Class="dtl-truncate" Style="font-weight:600;">@todo.Title</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@todo.ProjectName</MudText>
+                                    </MudStack>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(todo.Priority)" Variant="Variant.Outlined">
+                                        @GetPriorityText(todo.Priority)
+                                    </MudChip>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* 지연된 작업 (내 작업) *@
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 dtl-section" Elevation="0" Style="min-height:300px;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="dtl-section-header" Style="cursor:pointer;" @onclick="GoToTodos">
+                    <MudIcon Icon="@Icons.Material.Filled.RunningWithErrors" Color="Color.Error" />
+                    <MudText Typo="Typo.h6" Style="font-weight:600;">지연된 작업</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@_dashboard.MyOverdueTodos.Count</MudChip>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" Class="mud-text-secondary" />
+                </MudStack>
+                @if (_dashboard.MyOverdueTodos.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Success" Dense Variant="Variant.Text">지연된 작업이 없습니다!</MudAlert>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var todo in _dashboard.MyOverdueTodos)
+                        {
+                            var days = (DateTime.UtcNow.Date - (todo.DueDate?.Date ?? DateTime.UtcNow.Date)).Days;
+                            <MudPaper Class="pa-3 dtl-list-item dtl-list-item--overdue" Elevation="0"
+                                      @onclick="@(() => GoToDetail(todo.Id))">
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                    <div class="dtl-color-bar" style="height:36px; background:@todo.ProjectColor;"></div>
+                                    <MudStack Spacing="0" Style="flex:1; min-width:0;">
+                                        <MudText Typo="Typo.body1" Class="dtl-truncate" Style="font-weight:600;">@todo.Title</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Error">@(days)일 지연 - @todo.ProjectName</MudText>
+                                    </MudStack>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* 예정된 작업 (내 작업) *@
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 dtl-section" Elevation="0" Style="min-height:300px;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="dtl-section-header" Style="cursor:pointer;" @onclick="GoToTodos">
+                    <MudIcon Icon="@Icons.Material.Filled.EventNote" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6" Style="font-weight:600;">이번주 예정</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">@_dashboard.MyUpcomingTodos.Count</MudChip>
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" Class="mud-text-secondary" />
+                </MudStack>
+                @if (_dashboard.MyUpcomingTodos.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Normal" Dense Variant="Variant.Text">이번주 예정된 작업이 없습니다.</MudAlert>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var todo in _dashboard.MyUpcomingTodos)
+                        {
+                            <MudPaper Class="pa-3 dtl-list-item" Elevation="0"
+                                      @onclick="@(() => GoToDetail(todo.Id))">
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                    <div class="dtl-color-bar" style="height:36px; background:@todo.ProjectColor;"></div>
+                                    <MudStack Spacing="0" Style="flex:1; min-width:0;">
+                                        <MudText Typo="Typo.body1" Class="dtl-truncate" Style="font-weight:600;">@todo.Title</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@todo.DueDate?.ToString("M/d (ddd)") - @todo.ProjectName</MudText>
+                                    </MudStack>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+    </MudPaper>
+
+    @* 타인 작업 (기한 지연) 섹션 *@
+    @if (_dashboard?.OthersOverdueTodos.Count > 0)
+    {
+        <MudPaper Class="dtl-section pa-4 mb-3" Elevation="0">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.PeopleAlt" Color="Color.Warning" />
+            <MudText Typo="Typo.h6" Style="font-weight:600;">타인 작업 (기한 지연)</MudText>
+        </MudStack>
+            @foreach (var todo in _dashboard.OthersOverdueTodos)
+            {
+                <div class="dtl-list-item" style="display:flex; align-items:center; justify-content:space-between; padding:8px 0;">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight:600;">@todo.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Error">마감: @todo.DueDate?.ToString("MM/dd") · @todo.ProjectName @if(todo.IsExternal){<span> · 외부@(todo.ExternalLabel != null ? $"({todo.ExternalLabel})" : "")</span>} else if(todo.TeamName != null){<span> · @todo.TeamName</span>}</MudText>
+                    </div>
+                    <MudStack Row Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick="@(() => ExtendDeadline(todo))">기한 연장</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => CompleteOtherTask(todo))">완료 처리</MudButton>
+                    </MudStack>
+                </div>
+            }
+        </MudPaper>
+    }
+
+    @* 기한 연장 다이얼로그 *@
+    <MudDialog @bind-Visible="_extendDlgVisible" Options="new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }">
+        <TitleContent><MudText Typo="Typo.h6">기한 연장</MudText></TitleContent>
+        <DialogContent>
+            <MudStack Spacing="3" Class="pa-2">
+                <MudText Typo="Typo.body2">@_extendTodo?.Title</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">현재 마감일: @_extendTodo?.DueDate?.ToString("yyyy-MM-dd")</MudText>
+                <MudDatePicker @bind-Date="_extendNewDate" Label="새 마감일" Variant="Variant.Outlined" DateFormat="yyyy-MM-dd" />
+                <MudStack Row Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SetExtendDays(3))">+3일</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SetExtendDays(7))">+7일</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SetExtendDays(14))">+14일</MudButton>
+                </MudStack>
+            </MudStack>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="@(() => _extendDlgVisible = false)">취소</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ConfirmExtendDeadline" Disabled="@(!_extendNewDate.HasValue)">연장</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    @* API 헬스체크 *@
+    <MudPaper Class="pa-4 mb-3 dtl-section" Elevation="0">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="dtl-section-header">
+            <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Style="font-weight:600;">시스템 상태</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="CheckHealthAsync" Disabled="_healthChecking">새로고침</MudButton>
+        </MudStack>
+        <MudGrid Spacing="2">
+            @foreach (var h in _healthChecks)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="pa-2 dtl-list-item">
+                        @if (h.Status == HealthStatus.Checking)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate Style="width:20px; height:20px;" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@(h.Status == HealthStatus.Healthy ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+                                     Color="@(h.Status == HealthStatus.Healthy ? Color.Success : Color.Error)" Size="Size.Small" />
+                        }
+                        <MudStack Spacing="0" Style="flex:1;">
+                            <MudText Typo="Typo.body2" Style="font-weight:500;">@h.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@h.Message</MudText>
+                        </MudStack>
+                        @if (h.ResponseMs > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@(h.ResponseMs < 500 ? Color.Success : h.ResponseMs < 2000 ? Color.Warning : Color.Error)">
+                                @(h.ResponseMs)ms
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private DashboardDto _dashboard = new();
+    private List<ProjectDto> _projects = [];
+    private List<TeamDto> _teams = [];
+    private bool _loading = true;
+    private bool _quickSubmitting;
+    private bool _healthChecking;
+    private string? _quickTitle;
+    private long _quickProjectId;
+    private DateTime? _quickDueDate;
+    private long? _quickTeamId;
+    private long? _quickAssigneeTypeId;
+    private List<AssigneeTypeDto> _assigneeTypes = [];
+    private bool _quickIsExternal;
+    private System.Threading.Timer? _autoRefreshTimer;
+
+    // 기한 연장 다이얼로그
+    private bool _extendDlgVisible;
+    private TodoItemDto? _extendTodo;
+    private DateTime? _extendNewDate;
+
+    // 헬스체크
+    private List<HealthCheckItem> _healthChecks =
+    [
+        new() { Name = "API 서버", Url = "api/projects" },
+        new() { Name = "데이터베이스", Url = "api/todos?projectId=0" },
+        new() { Name = "케이스 트래커", Url = "api/cases/stats" },
+        new() { Name = "일정 파서", Url = "api/schedule" },
+        new() { Name = "버스 알림", Url = "api/bus-commute" }
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dashTask = DashboardApi.GetAsync();
+            var projTask = ProjectApi.GetAllAsync();
+            var teamTask = TeamApi.GetAllAsync();
+            var atTask = AssigneeTypeApi.GetAllAsync();
+            await Task.WhenAll(dashTask, projTask, teamTask, atTask);
+            _dashboard = dashTask.Result;
+            _projects = projTask.Result;
+            _teams = teamTask.Result;
+            _assigneeTypes = atTask.Result;
+            if (_projects.Count > 0) _quickProjectId = _projects[0].Id;
+            _quickAssigneeTypeId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"데이터 로드 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        // 백그라운드 헬스체크
+        _ = CheckHealthAsync();
+
+        // 자동 새로고침 설정
+        try
+        {
+            var setting = await SettingApi.GetNotificationsAsync();
+            if (setting.DashboardRefreshIntervalSeconds > 0)
+            {
+                var interval = TimeSpan.FromSeconds(setting.DashboardRefreshIntervalSeconds);
+                _autoRefreshTimer = new System.Threading.Timer(async _ =>
+                {
+                    try
+                    {
+                        _dashboard = await DashboardApi.GetAsync();
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    catch { }
+                }, null, interval, interval);
+            }
+        }
+        catch { }
+    }
+
+    private async Task QuickAddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_quickTitle)) return;
+        _quickSubmitting = true;
+        try
+        {
+            await TodoApi.CreateAsync(new CreateTodoRequest
+            {
+                Title = _quickTitle,
+                ProjectId = _quickProjectId,
+                DueDate = _quickDueDate,
+                TeamId = _quickTeamId,
+                AssigneeTypeId = _quickAssigneeTypeId,
+                IsExternal = _quickIsExternal,
+            });
+            _quickTitle = null;
+            _quickDueDate = null;
+            _quickIsExternal = false;
+            _dashboard = await DashboardApi.GetAsync();
+            Snackbar.Add("할일이 추가되었습니다.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"추가 실패: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _quickSubmitting = false;
+        }
+    }
+
+    private async Task OnQuickAddKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await QuickAddAsync();
+    }
+
+    private int GetStatusCount(string status)
+        => _dashboard.StatusCounts.TryGetValue(status, out var count) ? count : 0;
+
+    private static Color GetPriorityColor(TodoPriority p) => p switch
+    {
+        TodoPriority.Low => Color.Default,
+        TodoPriority.Normal => Color.Info,
+        TodoPriority.High => Color.Warning,
+        TodoPriority.Urgent => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string GetPriorityText(TodoPriority p) => p.ToKorean();
+
+    private void GoToTodos() => Navigation.NavigateTo("/todos");
+    private void GoToDetail(long id) => Navigation.NavigateTo($"/todos/detail/{id}");
+
+    /// <summary>외부 일정 토글 → 타인 작업 강제</summary>
+    private void OnQuickExternalChanged(bool val)
+    {
+        _quickIsExternal = val;
+        if (val) _quickAssigneeTypeId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+    }
+
+    private void OnQuickTeamChanged()
+    {
+        var team = _teams.FirstOrDefault(t => t.Id == _quickTeamId);
+        if (team is not null)
+            _quickAssigneeTypeId = team.IsMine
+                ? _assigneeTypes.FirstOrDefault(at => at.IsMine)?.Id
+                : _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+    }
+
+    /// <summary>타인 작업 기한 연장 다이얼로그 열기</summary>
+    private void ExtendDeadline(TodoItemDto todo)
+    {
+        _extendTodo = todo;
+        _extendNewDate = (todo.DueDate ?? DateTime.UtcNow).AddDays(7);
+        _extendDlgVisible = true;
+    }
+
+    private void SetExtendDays(int days)
+    {
+        _extendNewDate = (_extendTodo?.DueDate ?? DateTime.UtcNow).AddDays(days);
+    }
+
+    private async Task ConfirmExtendDeadline()
+    {
+        if (_extendTodo is null || !_extendNewDate.HasValue) return;
+        try
+        {
+            await TodoApi.UpdateAsync(_extendTodo.Id, new UpdateTodoRequest
+            {
+                Title = _extendTodo.Title,
+                Description = _extendTodo.Description,
+                Status = _extendTodo.Status,
+                Priority = _extendTodo.Priority,
+                DueDate = _extendNewDate,
+                StartDate = _extendTodo.StartDate,
+                EndDate = _extendNewDate,
+                ProjectId = _extendTodo.ProjectId,
+                TagIds = _extendTodo.Tags.Select(t => t.Id).ToList(),
+                TeamId = _extendTodo.TeamId,
+                WorkCategoryId = _extendTodo.WorkCategoryId,
+                AssigneeType = _extendTodo.AssigneeType,
+                AssigneeTypeId = _extendTodo.AssigneeTypeId,
+                IsExternal = _extendTodo.IsExternal,
+                ExternalLabel = _extendTodo.ExternalLabel
+            });
+            _extendDlgVisible = false;
+            _dashboard = await DashboardApi.GetAsync();
+            Snackbar.Add($"마감일이 {_extendNewDate?.ToString("yyyy-MM-dd")}로 연장되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"연장 실패: {ex.Message}", Severity.Error); }
+    }
+
+    /// <summary>타인 작업 완료 처리</summary>
+    private async Task CompleteOtherTask(TodoItemDto todo)
+    {
+        try
+        {
+            await TodoApi.UpdateStatusAsync(todo.Id, TodoStatus.Done);
+            _dashboard = await DashboardApi.GetAsync();
+            Snackbar.Add("완료 처리되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"완료 처리 실패: {ex.Message}", Severity.Error); }
+    }
+
+    public void Dispose() => _autoRefreshTimer?.Dispose();
+
+    private async Task CheckHealthAsync()
+    {
+        _healthChecking = true;
+        var http = HttpFactory.CreateClient("DevTodoApi");
+
+        foreach (var h in _healthChecks)
+        {
+            h.Status = HealthStatus.Checking;
+            h.Message = "확인중...";
+            StateHasChanged();
+        }
+
+        var tasks = _healthChecks.Select(async h =>
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var res = await http.GetAsync(h.Url);
+                sw.Stop();
+                h.ResponseMs = (int)sw.ElapsedMilliseconds;
+                h.Status = res.IsSuccessStatusCode ? HealthStatus.Healthy : HealthStatus.Unhealthy;
+                h.Message = res.IsSuccessStatusCode ? "정상" : $"HTTP {(int)res.StatusCode}";
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                h.ResponseMs = (int)sw.ElapsedMilliseconds;
+                h.Status = HealthStatus.Unhealthy;
+                h.Message = ex.Message.Length > 40 ? ex.Message[..40] + "..." : ex.Message;
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        _healthChecking = false;
+        StateHasChanged();
+    }
+
+    private enum HealthStatus { Checking, Healthy, Unhealthy }
+
+    private class HealthCheckItem
+    {
+        public string Name { get; set; } = "";
+        public string Url { get; set; } = "";
+        public HealthStatus Status { get; set; }
+        public string Message { get; set; } = "대기";
+        public int ResponseMs { get; set; }
+    }
+}

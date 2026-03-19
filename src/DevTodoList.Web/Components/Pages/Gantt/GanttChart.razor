@@ -1,0 +1,368 @@
+@page "/gantt"
+
+@inject GanttApiClient GanttApi
+@inject ProjectApiClient ProjectApi
+@inject TeamApiClient TeamApi
+@inject HolidayApiClient HolidayApi
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>간트 차트</PageTitle>
+
+<div class="dtl-page-header">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.BarChart" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">간트 차트</MudText>
+    </MudStack>
+    <MudStack Row Spacing="1">
+        <MudToggleIconButton @bind-Toggled="_groupByTeam" @bind-Toggled:after="OnGroupModeChanged"
+            Icon="@Icons.Material.Filled.Folder" ToggledIcon="@Icons.Material.Filled.Groups"
+            Variant="Variant.Outlined" Size="Size.Small" title="@(_groupByTeam ? "팀별" : "프로젝트별")" />
+        <MudToggleIconButton @bind-Toggled="_sortByDeadline" @bind-Toggled:after="OnSortModeChanged"
+            Icon="@Icons.Material.Filled.ArrowForward" ToggledIcon="@Icons.Material.Filled.ArrowBack"
+            Variant="Variant.Outlined" Size="Size.Small" title="@(_sortByDeadline ? "마감일순" : "시작일순")" />
+        <MudIconButton Icon="@Icons.Material.Filled.ZoomOut" OnClick="ZoomOut" Variant="Variant.Outlined" Size="Size.Small" />
+        <MudIconButton Icon="@Icons.Material.Filled.ZoomIn" OnClick="ZoomIn" Variant="Variant.Outlined" Size="Size.Small" />
+    </MudStack>
+</div>
+
+<MudPaper Class="dtl-section pa-3 mb-4" Elevation="0">
+    <MudStack Row Spacing="3" AlignItems="AlignItems.Center">
+        <SearchableSelect TItem="ProjectDto" TValue="long?"
+            Items="_projects" ValueSelector="@(p => (long?)p.Id)" TextSelector="@(p => p.Name)"
+            @bind-Value="_projectId" @bind-Value:after="LoadAsync" Label="프로젝트" Clearable Style="min-width:200px;" />
+        <SearchableSelect TItem="TeamDto" TValue="long?"
+            Items="_teams" ValueSelector="@(t => (long?)t.Id)" TextSelector="@(t => t.Name)"
+            @bind-Value="_teamId" @bind-Value:after="LoadAsync" Label="팀" Clearable Style="min-width:160px;" />
+        <MudSelect T="int?" @bind-Value="_assigneeType" @bind-Value:after="LoadAsync" Label="담당유형" Variant="Variant.Outlined" Dense Clearable Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter">
+            <MudSelectItem T="int?" Value="0">내 작업</MudSelectItem>
+            <MudSelectItem T="int?" Value="1">타인 작업</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+    @* 범례 *@
+    <MudStack Row Spacing="3" AlignItems="AlignItems.Center" Class="mt-2">
+        <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+            <div style="width:24px; height:10px; border-radius:3px; border:1px dashed #888; background:rgba(100,100,100,0.25);"></div>
+            <MudText Typo="Typo.caption">계획</MudText>
+        </MudStack>
+        <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+            <div style="width:24px; height:10px; border-radius:3px; background:@AppColors.DefaultProject;"></div>
+            <MudText Typo="Typo.caption">실제</MudText>
+        </MudStack>
+        <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+            <div style="width:10px; height:10px; border-radius:50%; background:var(--mud-palette-error);"></div>
+            <MudText Typo="Typo.caption">지연</MudText>
+        </MudStack>
+        <MudStack Row Spacing="1" AlignItems="AlignItems.Center">
+            <div style="width:24px; height:10px; border-radius:3px; background:rgba(244,67,54,0.08); border:1px solid rgba(244,67,54,0.3);"></div>
+            <MudText Typo="Typo.caption">공휴일</MudText>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate /> }
+else if (_items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">간트차트에 표시할 일정이 없습니다. 할일에 시작일/종료일을 설정하세요.</MudAlert>
+}
+else
+{
+    @* === CSS Grid 간트차트: 단일 스크롤 컨테이너 === *@
+    <div class="gantt-scroll-container">
+            <div style="display:grid; grid-template-columns:220px @(TotalDays * _dayWidth)px; width:@(220 + TotalDays * _dayWidth)px; position:relative;">
+
+                @* ── 헤더 행: 왼쪽 (작업명) ── *@
+                <div class="gantt-header-corner">
+                    <div style="height:24px; border-bottom:1px solid var(--mud-palette-lines-default);"></div>
+                    <div style="height:24px; display:flex; align-items:center; padding:0 12px; border-bottom:2px solid var(--mud-palette-lines-default); font-weight:600; font-size:13px;">작업명</div>
+                </div>
+
+                @* ── 헤더 행: 오른쪽 (월/일) ── *@
+                <div style="position:sticky; top:0; z-index:20; background:var(--mud-palette-surface);">
+                    @* 월 헤더 *@
+                    <div style="display:flex; height:24px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                        @foreach (var m in GetMonths())
+                        {
+                            <div style="width:@(m.Days * _dayWidth)px; padding-left:6px; background:var(--mud-palette-background-gray); font-size:11px; font-weight:600; line-height:24px; border-right:1px solid var(--mud-palette-lines-default);">
+                                @m.Label
+                            </div>
+                        }
+                    </div>
+                    @* 일 헤더 *@
+                    <div style="display:flex; height:24px; border-bottom:2px solid var(--mud-palette-lines-default);">
+                        @for (var d = _viewStart; d <= _viewEnd; d = d.AddDays(1))
+                        {
+                            var isWeekend = d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                            var isToday = d.Date == DateTime.UtcNow.Date;
+                            var isHoliday = _holidaySet.Contains(d.Date);
+                            var holidayName = isHoliday ? _holidayNames.GetValueOrDefault(d.Date) : null;
+                            <div style="width:@(_dayWidth)px; text-align:center; font-size:10px; line-height:24px; border-right:1px solid var(--mud-palette-table-lines); background:@(isToday ? "rgba(244,67,54,0.1)" : isHoliday ? "rgba(244,67,54,0.08)" : isWeekend ? "var(--mud-palette-action-default-hover)" : "transparent"); color:@(isToday ? "var(--mud-palette-error)" : isHoliday ? "var(--mud-palette-error)" : isWeekend ? "var(--mud-palette-text-disabled)" : "var(--mud-palette-text-secondary)"); font-weight:@(isToday || isHoliday ? "700" : "400");"
+                                 title="@(holidayName ?? "")">
+                                @d.Day
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* ── 데이터 행들 ── *@
+                @foreach (var row in _rows)
+                {
+                    var isHeader = row.IsProjectHeader;
+                    var hasDual = !isHeader && row.Item!.PlannedStartDate.HasValue && row.Item!.PlannedEndDate.HasValue;
+                    var h = isHeader ? 28 : (hasDual ? 40 : 28);
+
+                    @* 왼쪽 셀 (sticky left) *@
+                    <div class="gantt-sticky-left" style="height:@(h)px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                        @if (isHeader)
+                        {
+                            <div style="height:100%; display:flex; align-items:center; padding:0 12px; background:@(row.ProjectColor)15; cursor:pointer;"
+                                 @onclick="@(() => ToggleProject(row.ProjectId))">
+                                <div style="width:12px; height:12px; border-radius:3px; background:@row.ProjectColor; margin-right:8px; flex-shrink:0;"></div>
+                                <span style="font-size:12px; font-weight:700; color:@row.ProjectColor; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@row.ProjectName</span>
+                                <span style="font-size:16px; color:@row.ProjectColor;">@(IsProjectCollapsed(row.ProjectId) ? "▸" : "▾")</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="height:100%; display:flex; align-items:center; padding:0 12px 0 28px; cursor:pointer; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                 @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{row.Item!.Id}"))" title="@row.Item!.Title">
+                                <div style="width:6px; height:6px; border-radius:50%; background:@row.ProjectColor; margin-right:8px; flex-shrink:0;"></div>
+                                @row.Item!.Title
+                                @if (row.Item!.IsExternal)
+                                {
+                                    <span style="font-size:10px; color:var(--mud-palette-dark); margin-left:4px; font-weight:600;">(외부)</span>
+                                }
+                                else if (row.Item!.TeamName is not null)
+                                {
+                                    <span style="font-size:10px; color:var(--mud-palette-text-disabled); margin-left:4px;">(@row.Item!.TeamName)</span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @* 오른쪽 셀 (타임라인 바) *@
+                    <div style="height:@(h)px; position:relative; border-bottom:1px solid var(--mud-palette-table-lines);">
+                        @if (isHeader)
+                        {
+                            var projItems = _items.Where(x => x.ProjectId == row.ProjectId).ToList();
+                            var projStart = projItems.Min(x => x.StartDate);
+                            var projEnd = projItems.Max(x => x.EndDate);
+                            var pLeft = (int)(projStart.Date - _viewStart).TotalDays * _dayWidth;
+                            var pWidth = Math.Max((int)(projEnd.Date - projStart.Date).TotalDays * _dayWidth, _dayWidth);
+                            <div style="height:100%; background:@(row.ProjectColor)08; cursor:pointer;" @onclick="@(() => ToggleProject(row.ProjectId))">
+                                <div style="position:absolute; top:8px; left:@(pLeft)px; width:@(pWidth)px; height:12px; border-radius:6px; background:@(row.ProjectColor)40; border:1px solid @(row.ProjectColor)80;"></div>
+                            </div>
+                        }
+                        else
+                        {
+                            var item = row.Item!;
+                            @if (hasDual)
+                            {
+                                var pLeft2 = (int)(item.PlannedStartDate!.Value.Date - _viewStart).TotalDays * _dayWidth;
+                                var pWidth2 = Math.Max((int)(item.PlannedEndDate!.Value.Date - item.PlannedStartDate!.Value.Date).TotalDays * _dayWidth, _dayWidth);
+                                var actualStart = item.ActualStartDate ?? item.StartDate;
+                                var actualEnd = item.ActualEndDate ?? item.EndDate;
+                                var aLeft = (int)(actualStart.Date - _viewStart).TotalDays * _dayWidth;
+                                var aWidth = Math.Max((int)(actualEnd.Date - actualStart.Date).TotalDays * _dayWidth, _dayWidth);
+
+                                <div class="gantt-row" style="height:100%; cursor:pointer;"
+                                     title="@($"{item.Title} | 계획: {item.PlannedStartDate?.ToString("MM/dd")}~{item.PlannedEndDate?.ToString("MM/dd")} | 실제: {item.ActualStartDate?.ToString("MM/dd") ?? "-"}~{(item.ActualEndDate?.ToString("MM/dd") ?? "진행중")} | {item.ProgressPercent:F0}%{(item.IsDelayed ? $" | ⚠{item.DelayDays}일 지연" : "")}")"
+                                     @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{item.Id}"))">
+                                    @* 계획 바 (점선) *@
+                                    <div style="position:absolute; top:2px; left:@(pLeft2)px; width:@(pWidth2)px; height:16px; border-radius:4px; background:@(item.ProjectColor)30; border:1.5px dashed @(item.ProjectColor)80;"></div>
+                                    @* 실제 바 *@
+                                    <div style="position:absolute; top:21px; left:@(aLeft)px; width:@(aWidth)px; height:16px; border-radius:4px; background:@item.ProjectColor; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+                                        @if (item.IsDelayed)
+                                        {
+                                            <div style="position:absolute; right:-5px; top:-5px; width:10px; height:10px; border-radius:50%; background:var(--mud-palette-error); display:flex; align-items:center; justify-content:center;">
+                                                <span style="color:white; font-size:7px; font-weight:700;">!</span>
+                                            </div>
+                                        }
+                                        <span style="color:white; font-size:10px; font-weight:500; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:16px;">@item.Title</span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                var left = (int)(item.StartDate.Date - _viewStart).TotalDays * _dayWidth;
+                                var width = Math.Max((int)(item.EndDate.Date - item.StartDate.Date).TotalDays * _dayWidth, _dayWidth);
+                                <div class="gantt-row" style="height:100%; cursor:pointer;"
+                                     title="@($"{item.Title} | {item.StartDate:MM/dd}~{item.EndDate:MM/dd} | {item.ProgressPercent:F0}%")"
+                                     @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{item.Id}"))">
+                                    <div class="gantt-bar" style="position:absolute; top:4px; left:@(left)px; width:@(width)px; height:20px; border-radius:5px; background:@item.ProjectColor; display:flex; align-items:center; padding:0 6px; box-shadow:0 1px 3px rgba(0,0,0,0.15);">
+                                        <div style="position:absolute; left:0; top:0; height:100%; width:@(item.ProgressPercent)%; background:rgba(255,255,255,0.3); border-radius:6px;"></div>
+                                        <span style="color:white; font-size:11px; font-weight:500; z-index:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.Title</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+
+                @* 배경 오버레이: 주말/공휴일/오늘선 (전체 데이터 영역 커버) *@
+                <div style="position:absolute; top:50px; left:220px; width:@(TotalDays * _dayWidth)px; height:@(TotalRowsHeight)px; pointer-events:none; z-index:0;">
+                    @for (var d = _viewStart; d <= _viewEnd; d = d.AddDays(1))
+                    {
+                        var isWe = d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                        var isHol = _holidaySet.Contains(d.Date);
+                        @if (isWe || isHol)
+                        {
+                            var off = (d.Date - _viewStart).Days;
+                            <div style="position:absolute; top:0; bottom:0; left:@(off * _dayWidth)px; width:@(_dayWidth)px; background:@(isHol ? "rgba(244,67,54,0.06)" : "rgba(0,0,0,0.03)");"></div>
+                        }
+                    }
+                    @{ var todayOff = (DateTime.UtcNow.Date - _viewStart).Days; }
+                    @if (todayOff >= 0 && todayOff <= TotalDays)
+                    {
+                        <div style="position:absolute; top:0; bottom:0; left:@(todayOff * _dayWidth + _dayWidth / 2)px; width:2px; background:var(--mud-palette-error); z-index:5;"></div>
+                    }
+                </div>
+            </div>
+    </div>
+
+}
+
+@code {
+    private List<GanttItemDto> _items = [];
+    private List<ProjectDto> _projects = [];
+    private List<TeamDto> _teams = [];
+    private bool _loading = true;
+    private long? _projectId;
+    private long? _teamId;
+    private int? _assigneeType;
+    private bool _groupByTeam;
+    private bool _sortByDeadline;
+    private int _dayWidth = GanttDefaults.InitialDayWidth;
+    private DateTime _viewStart;
+    private DateTime _viewEnd;
+    private int TotalDays => (_viewEnd - _viewStart).Days + 1;
+
+    // 프로젝트별 그룹핑용
+    private List<GanttRow> _rows = [];
+    private HashSet<long> _collapsedProjects = [];
+
+    // 공휴일
+    private HashSet<DateTime> _holidaySet = [];
+    private Dictionary<DateTime, string> _holidayNames = [];
+
+    /// <summary>데이터 행 전체 높이 (배경 오버레이용)</summary>
+    private int TotalRowsHeight => _rows.Sum(r =>
+        r.IsProjectHeader ? 28 : (r.Item!.PlannedStartDate.HasValue && r.Item!.PlannedEndDate.HasValue ? 40 : 28));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _projects = await ProjectApi.GetAllAsync();
+        _teams = await TeamApi.GetAllAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _items = await GanttApi.GetAsync(_projectId, teamId: _teamId, assigneeType: _assigneeType.HasValue ? (AssigneeType)_assigneeType.Value : null);
+            if (_items.Count > 0)
+            {
+                var allDates = _items.SelectMany(x => new[] { x.StartDate, x.EndDate, x.PlannedStartDate ?? x.StartDate, x.PlannedEndDate ?? x.EndDate, x.ActualStartDate ?? x.StartDate, x.ActualEndDate ?? x.EndDate });
+                _viewStart = allDates.Min().AddDays(-GanttDefaults.MarginBefore);
+                _viewEnd = allDates.Max().AddDays(GanttDefaults.MarginAfter);
+            }
+            else
+            {
+                _viewStart = DateTime.UtcNow.AddDays(-GanttDefaults.EmptyViewBefore);
+                _viewEnd = DateTime.UtcNow.AddDays(GanttDefaults.EmptyViewAfter);
+            }
+            try
+            {
+                var holidays = await HolidayApi.GetByRangeAsync(_viewStart, _viewEnd);
+                _holidaySet = holidays.Select(h => h.Date.Date).ToHashSet();
+                _holidayNames = holidays.ToDictionary(h => h.Date.Date, h => h.Name);
+            }
+            catch { }
+
+            BuildRows();
+        }
+        catch (Exception ex) { Snackbar.Add($"간트 데이터 로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    /// <summary>프로젝트별 또는 팀별 그룹 행 목록 생성</summary>
+    private void BuildRows()
+    {
+        _rows.Clear();
+
+        if (_groupByTeam)
+        {
+            var groups = _items
+                .GroupBy(x => new { TeamId = x.TeamId ?? 0, TeamName = x.TeamName ?? AppLabels.UnassignedTeam, Color = AppColors.UnassignedTeam })
+                .OrderBy(g => g.Key.TeamName);
+
+            foreach (var group in groups)
+            {
+                _rows.Add(new GanttRow { IsProjectHeader = true, ProjectId = group.Key.TeamId, ProjectName = group.Key.TeamName, ProjectColor = group.Key.Color });
+                if (_collapsedProjects.Contains(group.Key.TeamId)) continue;
+                foreach (var item in SortItems(group))
+                    _rows.Add(new GanttRow { ProjectId = group.Key.TeamId, ProjectName = group.Key.TeamName, ProjectColor = item.ProjectColor, Item = item });
+            }
+        }
+        else
+        {
+            var groups = _items
+                .GroupBy(x => new { x.ProjectId, x.ProjectName, x.ProjectColor })
+                .OrderBy(g => g.Key.ProjectName);
+
+            foreach (var group in groups)
+            {
+                _rows.Add(new GanttRow { IsProjectHeader = true, ProjectId = group.Key.ProjectId, ProjectName = group.Key.ProjectName, ProjectColor = group.Key.ProjectColor });
+                if (_collapsedProjects.Contains(group.Key.ProjectId)) continue;
+                foreach (var item in SortItems(group))
+                    _rows.Add(new GanttRow { ProjectId = group.Key.ProjectId, ProjectName = group.Key.ProjectName, ProjectColor = group.Key.ProjectColor, Item = item });
+            }
+        }
+    }
+
+    private void OnGroupModeChanged() => BuildRows();
+    private void OnSortModeChanged() => BuildRows();
+
+    /// <summary>정렬: 마감일순 또는 시작일순</summary>
+    private IOrderedEnumerable<GanttItemDto> SortItems(IEnumerable<GanttItemDto> items)
+        => _sortByDeadline ? items.OrderBy(x => x.EndDate).ThenBy(x => x.StartDate)
+                           : items.OrderBy(x => x.StartDate).ThenBy(x => x.EndDate);
+
+    private void ToggleProject(long projectId)
+    {
+        if (!_collapsedProjects.Remove(projectId))
+            _collapsedProjects.Add(projectId);
+        BuildRows();
+    }
+
+    private bool IsProjectCollapsed(long projectId) => _collapsedProjects.Contains(projectId);
+
+    private void ZoomIn() => _dayWidth = Math.Min(GanttDefaults.MaxDayWidth, _dayWidth + GanttDefaults.ZoomStep);
+    private void ZoomOut() => _dayWidth = Math.Max(GanttDefaults.MinDayWidth, _dayWidth - GanttDefaults.ZoomStep);
+
+    private List<(string Label, int Days)> GetMonths()
+    {
+        var months = new List<(string, int)>();
+        var d = _viewStart;
+        while (d <= _viewEnd)
+        {
+            var end = new DateTime(d.Year, d.Month, DateTime.DaysInMonth(d.Year, d.Month));
+            if (end > _viewEnd) end = _viewEnd;
+            var days = (end - d).Days + 1;
+            months.Add(($"{d.Year}.{d.Month:D2}", days));
+            d = end.AddDays(1);
+        }
+        return months;
+    }
+
+    private class GanttRow
+    {
+        public bool IsProjectHeader { get; set; }
+        public long ProjectId { get; set; }
+        public string ProjectName { get; set; } = "";
+        public string ProjectColor { get; set; } = "";
+        public GanttItemDto? Item { get; set; }
+    }
+}

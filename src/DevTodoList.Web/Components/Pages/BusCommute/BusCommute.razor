@@ -1,0 +1,364 @@
+@page "/bus-commute"
+
+@inject BusCommuteApiClient BusApi
+@inject BusStationApiClient StationApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>버스 출퇴근 알림</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.DirectionsBus" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">버스 출퇴근 알림</MudText>
+    </MudStack>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        새 알림 설정
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate />
+}
+else if (_settings.Count == 0)
+{
+    <MudPaper Class="pa-8" Elevation="0" Style="text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.NotificationsOff" Size="Size.Large" Class="mud-text-secondary mb-2" />
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">등록된 알림 설정이 없습니다.</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">새 알림 설정을 추가해보세요!</MudText>
+    </MudPaper>
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var s in _settings)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Class="dtl-section" Elevation="0">
+                    <MudCardContent>
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                            <MudAvatar Color="@(s.CommuteType == CommuteType.Morning ? Color.Info : Color.Warning)" Variant="Variant.Filled" Size="Size.Small">
+                                <MudIcon Icon="@(s.CommuteType == CommuteType.Morning ? Icons.Material.Filled.WbSunny : Icons.Material.Filled.NightsStay)" Size="Size.Small" />
+                            </MudAvatar>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight:600; flex:1;">@s.Name</MudText>
+                            <MudSwitch T="bool" Value="s.IsEnabled" ValueChanged="@(async (bool _) => await ToggleAsync(s))"
+                                       Color="Color.Primary" Size="Size.Small" />
+                        </MudStack>
+
+                        <MudSimpleTable Dense Style="border-radius:8px;">
+                            <tbody>
+                                <tr><td style="width:80px;"><MudText Typo="Typo.caption" Class="mud-text-secondary">구분</MudText></td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="@(s.CommuteType == CommuteType.Morning ? Color.Info : Color.Warning)" Variant="Variant.Filled">@s.CommuteType.ToKorean()</MudChip></td></tr>
+                                <tr><td><MudText Typo="Typo.caption" Class="mud-text-secondary">노선</MudText></td>
+                                    <td><MudText Typo="Typo.body2" Style="font-weight:600;">@s.BusRouteNumber</MudText></td></tr>
+                                <tr><td><MudText Typo="Typo.caption" Class="mud-text-secondary">정류장</MudText></td>
+                                    <td><MudText Typo="Typo.body2">@s.BusStopName</MudText></td></tr>
+                                <tr><td><MudText Typo="Typo.caption" Class="mud-text-secondary">모니터링</MudText></td>
+                                    <td><MudText Typo="Typo.body2" Style="font-weight:600;">@s.MonitoringStartTime ~ @s.MonitoringEndTime</MudText></td></tr>
+                                <tr><td><MudText Typo="Typo.caption" Class="mud-text-secondary">알림</MudText></td>
+                                    <td><MudText Typo="Typo.body2">@FormatThresholds(s)</MudText></td></tr>
+                                <tr><td><MudText Typo="Typo.caption" Class="mud-text-secondary">요일</MudText></td>
+                                    <td><MudText Typo="Typo.body2">@DayBitmasks.ToKoreanText(s.ActiveDays)</MudText></td></tr>
+                            </tbody>
+                        </MudSimpleTable>
+
+                        @* 실시간 도착정보 표시 *@
+                        @if (_arrivalInfos.TryGetValue(s.Id, out var arrival))
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense Class="mt-2" NoIcon>
+                                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" />
+                                    <MudText Typo="Typo.body2" Style="font-weight:600;">
+                                        @if (!string.IsNullOrEmpty(arrival.Summary))
+                                        {
+                                            @arrival.Summary
+                                        }
+                                        else if (!string.IsNullOrEmpty(arrival.Message))
+                                        {
+                                            @arrival.Message
+                                        }
+                                    </MudText>
+                                </MudStack>
+                            </MudAlert>
+                        }
+                        else if (_arrivalLoading.Contains(s.Id))
+                        {
+                            <MudProgressLinear Color="Color.Info" Indeterminate Size="Size.Small" Class="mt-2" />
+                        }
+
+                        @if (s.LastNotifiedAt.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                                마지막 알림: @s.LastNotifiedAt.Value.ToString("MM/dd HH:mm")
+                            </MudText>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Size="Size.Small" Color="Color.Tertiary" StartIcon="@Icons.Material.Filled.AccessTime"
+                                   OnClick="@(() => RefreshArrivalAsync(s))" Disabled="_arrivalLoading.Contains(s.Id)">도착정보</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Info" StartIcon="@Icons.Material.Filled.Send"
+                                   OnClick="@(() => TestNotificationAsync(s))" Disabled="_testSending">테스트</MudButton>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(s))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmDeleteAsync(s))" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@* 생성/수정 다이얼로그 *@
+<MudDialog @bind-Visible="_dialogVisible" Options="new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "알림 설정 수정" : "새 알림 설정")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pa-2">
+            <MudTextField @bind-Value="_form.Name" Label="설정 이름" Required RequiredError="이름을 입력하세요"
+                          Variant="Variant.Outlined" Placeholder="예: 평일 출근" />
+
+            <MudSelect T="int" @bind-Value="_form.CommuteType" Label="구분" Variant="Variant.Outlined">
+                <MudSelectItem T="int" Value="0">출근</MudSelectItem>
+                <MudSelectItem T="int" Value="1">퇴근</MudSelectItem>
+            </MudSelect>
+
+            <MudTextField @bind-Value="_form.BusRouteNumber" Label="버스 노선 번호" Variant="Variant.Outlined"
+                          Placeholder="예: 1112" />
+
+            <MudTextField @bind-Value="_form.BusStopName" Label="정류장 이름" Variant="Variant.Outlined"
+                          Placeholder="예: 청현마을·수원신갈IC" Required RequiredError="정류장 이름을 입력하세요" />
+
+            <MudStack Row Spacing="2">
+                <MudTextField @bind-Value="_form.MonitoringStartTime" Label="모니터링 시작 (HH:mm)" Variant="Variant.Outlined"
+                              Placeholder="07:00" Style="flex:1;" />
+                <MudTextField @bind-Value="_form.MonitoringEndTime" Label="모니터링 종료 (HH:mm)" Variant="Variant.Outlined"
+                              Placeholder="08:00" Style="flex:1;" />
+            </MudStack>
+
+            <MudTextField @bind-Value="_form.AlertThresholds" Label="알림 임계값 (분, 쉼표 구분)"
+                          Variant="Variant.Outlined" Placeholder="예: 15,10,5" HelperText="각 임계값마다 알림 발송 (내림차순 권장)" />
+
+            @* 정류장 마스터 선택 *@
+            <MudSelect T="long?" Value="_form.BusStationId" Label="정류장 (마스터)" Variant="Variant.Outlined"
+                       Clearable Placeholder="직접 입력 또는 정류장 선택" AnchorOrigin="Origin.BottomCenter"
+                       ValueChanged="OnStationSelected">
+                @foreach (var st in _stations)
+                {
+                    <MudSelectItem T="long?" Value="@((long?)st.Id)">
+                        @st.Name (@st.BusRouteNumber @st.Direction.ToKorean())
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            @* GBIS 정류소 정보 *@
+            <MudText Typo="Typo.body2" Class="mb-n2" Style="font-weight:600;">GBIS 실시간 도착정보 설정</MudText>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense>
+                정류장을 선택하면 자동 채워집니다. 직접 입력도 가능합니다.
+            </MudAlert>
+            <MudTextField @bind-Value="_form.GbisStationId" Label="GBIS 정류소 ID" Variant="Variant.Outlined"
+                          Placeholder="예: 228000700" Disabled="_form.BusStationId.HasValue" />
+            <MudTextField @bind-Value="_form.GbisRouteId" Label="GBIS 노선 ID" Variant="Variant.Outlined"
+                          Placeholder="예: 234000016" Disabled="_form.BusStationId.HasValue" />
+            <MudNumericField T="int?" @bind-Value="_form.GbisStaOrder" Label="GBIS 정류소 순번" Variant="Variant.Outlined"
+                             Placeholder="예: 14" Disabled="_form.BusStationId.HasValue" />
+
+            @* 요일 선택 *@
+            <MudText Typo="Typo.body2" Class="mb-n2">적용 요일</MudText>
+            <MudStack Row Spacing="1">
+                @foreach (var (flag, label) in _dayOptions)
+                {
+                    var isChecked = (_form.ActiveDays & flag) != 0;
+                    <MudChip T="string" Size="Size.Small" Color="@(isChecked ? Color.Primary : Color.Default)"
+                             Variant="@(isChecked ? Variant.Filled : Variant.Outlined)"
+                             OnClick="@(() => ToggleDay(flag))">@label</MudChip>
+                }
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">취소</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate Class="mr-2" /> }
+            저장
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<BusCommuteSettingDto> _settings = [];
+    private List<BusStationDto> _stations = [];
+    private bool _loading = true;
+    private bool _saving;
+    private bool _testSending;
+    private bool _dialogVisible;
+    private bool _isEdit;
+    private long _editId;
+    private CreateBusCommuteSettingRequest _form = new();
+
+    /// <summary>알림 임계값 포맷 (예: "15, 10, 5분 전")</summary>
+    private static string FormatThresholds(BusCommuteSettingDto s)
+    {
+        var t = s.AlertThresholds;
+        if (!string.IsNullOrWhiteSpace(t))
+            return string.Join(", ", t.Split(',', StringSplitOptions.TrimEntries)) + "분 전";
+        return $"{s.AlertMinutesBefore}분 전";
+    }
+
+    // 실시간 도착정보
+    private Dictionary<long, BusArrivalInfoDto> _arrivalInfos = new();
+    private HashSet<long> _arrivalLoading = new();
+
+    // 요일 옵션 (DayBitmasks 상수 사용)
+    private static readonly (int flag, string label)[] _dayOptions =
+    [
+        (DayBitmasks.Monday, "월"), (DayBitmasks.Tuesday, "화"), (DayBitmasks.Wednesday, "수"),
+        (DayBitmasks.Thursday, "목"), (DayBitmasks.Friday, "금"), (DayBitmasks.Saturday, "토"),
+        (DayBitmasks.Sunday, "일")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        try { _stations = await StationApi.GetAllAsync(); } catch { }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try { _settings = await BusApi.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEdit = false;
+        _form = new CreateBusCommuteSettingRequest();
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(BusCommuteSettingDto s)
+    {
+        _isEdit = true;
+        _editId = s.Id;
+        _form = new CreateBusCommuteSettingRequest
+        {
+            Name = s.Name,
+            CommuteType = (int)s.CommuteType,
+            BusStopName = s.BusStopName,
+            BusRouteNumber = s.BusRouteNumber,
+            GbisStationId = s.GbisStationId,
+            GbisRouteId = s.GbisRouteId,
+            GbisStaOrder = s.GbisStaOrder,
+            MonitoringStartTime = s.MonitoringStartTime,
+            MonitoringEndTime = s.MonitoringEndTime,
+            AlertMinutesBefore = s.AlertMinutesBefore,
+            AlertThresholds = s.AlertThresholds,
+            IsEnabled = s.IsEnabled,
+            ActiveDays = s.ActiveDays,
+            BusStationId = s.BusStationId
+        };
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Name)) { Snackbar.Add("이름을 입력하세요.", Severity.Warning); return; }
+        if (string.IsNullOrWhiteSpace(_form.BusRouteNumber)) { Snackbar.Add("노선 번호를 입력하세요.", Severity.Warning); return; }
+        if (string.IsNullOrWhiteSpace(_form.BusStopName)) { Snackbar.Add("정류장 이름을 입력하세요.", Severity.Warning); return; }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit) { await BusApi.UpdateAsync(_editId, _form); Snackbar.Add("수정되었습니다.", Severity.Success); }
+            else { await BusApi.CreateAsync(_form); Snackbar.Add("생성되었습니다.", Severity.Success); }
+            _dialogVisible = false;
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"저장 실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task ToggleAsync(BusCommuteSettingDto s)
+    {
+        try { await BusApi.ToggleAsync(s.Id); s.IsEnabled = !s.IsEnabled; }
+        catch (Exception ex) { Snackbar.Add($"변경 실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ConfirmDeleteAsync(BusCommuteSettingDto s)
+    {
+        var result = await DialogService.ShowMessageBoxAsync("알림 삭제", $"'{s.Name}' 설정을 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (result == true)
+        {
+            try { await BusApi.DeleteAsync(s.Id); Snackbar.Add("삭제되었습니다.", Severity.Success); await LoadAsync(); }
+            catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private async Task TestNotificationAsync(BusCommuteSettingDto s)
+    {
+        _testSending = true;
+        try
+        {
+            var success = await BusApi.TestNotificationAsync(s.Id);
+            Snackbar.Add(success ? "테스트 알림이 발송되었습니다." : "발송에 실패했습니다.", success ? Severity.Success : Severity.Error);
+        }
+        catch (Exception ex) { Snackbar.Add($"테스트 실패: {ex.Message}", Severity.Error); }
+        finally { _testSending = false; }
+    }
+
+    /// <summary>실시간 도착정보 조회</summary>
+    private async Task RefreshArrivalAsync(BusCommuteSettingDto s)
+    {
+        if (string.IsNullOrEmpty(s.GbisStationId) || string.IsNullOrEmpty(s.GbisRouteId) || !s.GbisStaOrder.HasValue)
+        {
+            Snackbar.Add("GBIS 정류소 정보가 설정되지 않았습니다.", Severity.Warning);
+            return;
+        }
+
+        _arrivalLoading.Add(s.Id);
+        StateHasChanged();
+        try
+        {
+            var info = await BusApi.GetArrivalAsync(s.Id);
+            if (info is not null)
+                _arrivalInfos[s.Id] = info;
+            else
+                _arrivalInfos[s.Id] = new BusArrivalInfoDto { Message = "조회 실패" };
+        }
+        catch (Exception ex) { Snackbar.Add($"도착정보 조회 실패: {ex.Message}", Severity.Error); }
+        finally
+        {
+            _arrivalLoading.Remove(s.Id);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>정류장 마스터 선택 시 GBIS 필드 자동 채움</summary>
+    private void OnStationSelected(long? stationId)
+    {
+        _form.BusStationId = stationId;
+        if (stationId.HasValue)
+        {
+            var st = _stations.FirstOrDefault(s => s.Id == stationId.Value);
+            if (st is not null)
+            {
+                _form.BusStopName = st.BusStopName;
+                _form.BusRouteNumber = st.BusRouteNumber;
+                _form.GbisStationId = st.GbisStationId;
+                _form.GbisRouteId = st.GbisRouteId;
+                _form.GbisStaOrder = st.GbisStaOrder;
+            }
+        }
+    }
+
+    private void ToggleDay(int flag)
+    {
+        _form.ActiveDays ^= flag;
+    }
+
+}

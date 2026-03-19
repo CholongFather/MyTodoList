@@ -1,0 +1,387 @@
+@page "/todos"
+@page "/todos/{ProjectId:long?}"
+
+@using DevTodoList.Shared.Helpers
+
+@inject TodoApiClient TodoApi
+@inject ProjectApiClient ProjectApi
+@inject TeamApiClient TeamApi
+@inject AssigneeTypeApiClient AssigneeTypeApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>할일 목록</PageTitle>
+
+<div class="dtl-page-header">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">할일 목록</MudText>
+    </MudStack>
+    <MudStack Row Spacing="1">
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.FileDownload" OnClick="ExportCsvAsync">CSV</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">새 할일</MudButton>
+    </MudStack>
+</div>
+
+<MudPaper Class="dtl-filter-bar mb-4" Elevation="0">
+    <MudStack Row Spacing="3" AlignItems="AlignItems.Center">
+        <SearchableSelect TItem="ProjectDto" TValue="long?"
+            Items="_projects" ValueSelector="@(p => (long?)p.Id)" TextSelector="@(p => p.Name)"
+            @bind-Value="_filterProjectId" Label="프로젝트" Clearable Style="min-width:200px;" />
+        <MudSelect T="TodoStatus?" @bind-Value="_filterStatus" Label="상태" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable Style="min-width:140px;" AnchorOrigin="Origin.BottomCenter">
+            @foreach (TodoStatus s in Enum.GetValues<TodoStatus>()) { <MudSelectItem T="TodoStatus?" Value="s">@StatusLabel(s)</MudSelectItem> }
+        </MudSelect>
+        <MudTextField @bind-Value="_search" Label="검색" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" Immediate DebounceInterval="400" Style="min-width:200px;" />
+        <SearchableSelect TItem="TeamDto" TValue="long?"
+            Items="_teams" ValueSelector="@(t => (long?)t.Id)" TextSelector="@(t => t.Name)"
+            @bind-Value="_filterTeamId" @bind-Value:after="LoadAsync" Label="팀" Clearable Style="min-width:140px;" />
+        <MudSelect T="long?" @bind-Value="_filterAssigneeTypeId" @bind-Value:after="LoadAsync" Label="담당유형" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter">
+            @foreach (var at in _assigneeTypes) { <MudSelectItem T="long?" Value="at.Id">@at.Name</MudSelectItem> }
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadAsync" StartIcon="@Icons.Material.Filled.Refresh">조회</MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate /> }
+else if (_grouped.Count == 0)
+{
+    <MudPaper Class="dtl-section pa-8" Elevation="0" Style="text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Class="mud-text-secondary mb-2" />
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">할일이 없습니다.</MudText>
+    </MudPaper>
+}
+else
+{
+    @foreach (var group in _grouped)
+    {
+        <MudPaper Class="dtl-section mb-3" Elevation="0" Style="overflow:hidden;">
+            @* 프로젝트 헤더 *@
+            <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="pa-3" Style="@($"background:{group.Color}18; border-left:4px solid {group.Color};")">
+                <MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Small" Style="@($"color:{group.Color};")" />
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@group.Name</MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="@($"border-color:{group.Color}; color:{group.Color};")">@group.Items.Count 건</MudChip>
+                <MudSpacer />
+                <MudIconButton Icon="@(_collapsed.Contains(group.ProjectId) ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)"
+                               Size="Size.Small" OnClick="() => ToggleCollapse(group.ProjectId)" />
+            </MudStack>
+
+            @if (!_collapsed.Contains(group.ProjectId))
+            {
+                <MudSimpleTable Dense Hover Striped>
+                    <thead>
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>제목</th>
+                            <th style="width:100px;">상태</th>
+                            <th style="width:100px;">담당팀</th>
+                            <th style="width:100px;">작업분류</th>
+                            <th style="width:80px;">담당</th>
+                            <th style="width:110px;">마감일</th>
+                            <th style="width:120px;">진행률</th>
+                            <th style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in group.Items)
+                        {
+                            <tr class="dtl-list-item @(_dragTarget == item ? "drag-over" : "")"
+                                draggable="true"
+                                @ondragstart="() => DragStart(item, group)"
+                                @ondragenter="() => DragEnter(item)"
+                                @ondragover:preventDefault
+                                @ondrop="() => Drop(item, group)"
+                                @ondragend="DragEnd"
+                                @onclick="() => GoToDetail(item.Id)">
+                                <td><MudIcon Icon="@PriorityIcon(item.Priority)" Size="Size.Small" Color="@PriorityColor(item.Priority)" /></td>
+                                <td><MudLink Href="@($"/todos/detail/{item.Id}")" Underline="Underline.Hover" Style="font-weight:500;">@item.Title</MudLink></td>
+                                <td>
+                                    @if (item.AssigneeType == AssigneeType.Others)
+                                    {
+                                        var cs = OthersStatusHelper.Compute(item.StartDate, item.EndDate, item.DueDate);
+                                        <MudChip T="string" Size="Size.Small" Color="@OthersColor(cs)" Variant="Variant.Filled">@OthersStatusHelper.ToLabel(cs)</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@StatusColor(item.Status)" Variant="Variant.Filled">@StatusLabel(item.Status)</MudChip>
+                                    }
+                                </td>
+                                <td style="font-size:12px;">
+                                    @if (item.IsExternal)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Dark" Variant="Variant.Filled" Class="ma-0">외부@(item.ExternalLabel != null ? $" ({item.ExternalLabel})" : "")</MudChip>
+                                    }
+                                    else if (item.TeamName is not null)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Style="@($"background:{item.TeamColor}; color:white;")" Class="ma-0">@item.TeamName</MudChip>
+                                    }
+                                </td>
+                                <td style="font-size:12px;">
+                                    @if (item.WorkCategoryName is not null)
+                                    {
+                                        <span>@item.WorkCategoryName</span>
+                                    }
+                                </td>
+                                <td style="font-size:12px;">
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@(item.AssigneeType == AssigneeType.Mine ? Color.Primary : Color.Warning)"
+                                             Variant="Variant.Outlined" Class="ma-0"
+                                             Style="@(item.AssigneeTypeColor != null ? $"border-color:{item.AssigneeTypeColor};color:{item.AssigneeTypeColor};" : "")">
+                                        @(item.AssigneeTypeName ?? (item.AssigneeType == AssigneeType.Mine ? "내 작업" : "타인"))
+                                    </MudChip>
+                                </td>
+                                <td>
+                                    @if (item.DueDate.HasValue)
+                                    {
+                                        var overdue = item.DueDate.Value.Date < DateTime.Today && item.Status != TodoStatus.Done;
+                                        <MudText Typo="Typo.body2" Color="@(overdue ? Color.Error : Color.Default)">@item.DueDate.Value.ToString("yyyy-MM-dd")</MudText>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.CheckItemTotal > 0)
+                                    {
+                                        var pct = (double)item.CheckItemCompleted / item.CheckItemTotal * 100;
+                                        <MudStack Spacing="0">
+                                            <MudProgressLinear Value="pct" Color="@(pct >= 100 ? Color.Success : Color.Primary)" Size="Size.Small" Rounded />
+                                            <MudText Typo="Typo.caption" Align="Align.Center">@item.CheckItemCompleted/@item.CheckItemTotal</MudText>
+                                        </MudStack>
+                                    }
+                                </td>
+                                <td @onclick:stopPropagation>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteTodoAsync(item))" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudPaper>
+    }
+}
+
+<MudDialog @bind-Visible="_dlgVisible" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent><MudText Typo="Typo.h6">새 할일</MudText></TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3" Class="pa-2" Style="min-width:400px;">
+            <MudTextField @bind-Value="_cf.Title" Label="제목" Required Variant="Variant.Outlined" />
+            <SearchableSelect TItem="ProjectDto" TValue="long"
+                Items="_projects" ValueSelector="@(p => p.Id)" TextSelector="@(p => p.Name)"
+                @bind-Value="_cf.ProjectId" Label="프로젝트" Style="min-width:200px;" />
+            <MudSelect T="TodoPriority" @bind-Value="_cf.Priority" Label="우선순위" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                @foreach (TodoPriority p in Enum.GetValues<TodoPriority>()) { <MudSelectItem T="TodoPriority" Value="p">@PriorityLabel(p)</MudSelectItem> }
+            </MudSelect>
+            <SearchableSelect TItem="TeamDto" TValue="long?"
+                Items="_teams" ValueSelector="@(t => (long?)t.Id)" TextSelector="@(t => t.Name)"
+                @bind-Value="_cfTeamId" @bind-Value:after="OnCfTeamChanged" Label="담당 팀" Clearable />
+            <MudSelect T="long?" @bind-Value="_cfWorkCategoryId" Label="작업 분류" Variant="Variant.Outlined" Clearable AnchorOrigin="Origin.BottomCenter">
+                @foreach (var cat in _cfAvailableCategories) { <MudSelectItem T="long?" Value="cat.Id">@cat.Name</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="long?" @bind-Value="_cfAssigneeTypeId" Label="담당 유형" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var at in _assigneeTypes) { <MudSelectItem T="long?" Value="at.Id">@at.Name</MudSelectItem> }
+            </MudSelect>
+            <MudCheckBox T="bool" Value="_cfIsExternal" ValueChanged="OnCfExternalChanged" Label="외부 일정" Color="Color.Dark" Dense />
+            @if (_cfIsExternal)
+            {
+                <MudTextField @bind-Value="_cfExternalLabel" Label="외부 채널명" Variant="Variant.Outlined" Placeholder="예: NK 이벤트빌더" />
+            }
+            <MudDatePicker @bind-Date="_cfDue" Label="마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dlgVisible = false">취소</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAsync" Disabled="_saving">생성</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public long? ProjectId { get; set; }
+    private List<TodoItemDto> _todos = [];
+    private List<ProjectDto> _projects = [];
+    private List<TeamDto> _teams = [];
+    private List<ProjectGroup> _grouped = [];
+    private HashSet<long> _collapsed = [];
+    private bool _loading = true, _saving, _dlgVisible;
+    private long? _filterProjectId;
+    private TodoStatus? _filterStatus;
+    private long? _filterTeamId;
+    private long? _filterAssigneeTypeId;
+    private string? _search;
+    private CreateTodoRequest _cf = new();
+    private DateTime? _cfDue;
+    // 생성 다이얼로그 팀/작업분류/담당유형
+    private long? _cfTeamId;
+    private long? _cfWorkCategoryId;
+    private long? _cfAssigneeTypeId;
+    private bool _cfIsExternal;
+    private string? _cfExternalLabel;
+    private List<WorkCategoryDto> _cfAvailableCategories = [];
+    private List<AssigneeTypeDto> _assigneeTypes = [];
+    // 드래그 앤 드롭 상태
+    private TodoItemDto? _dragging;
+    private TodoItemDto? _dragTarget;
+    private ProjectGroup? _dragGroup;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _filterProjectId = ProjectId;
+        _projects = await ProjectApi.GetAllAsync();
+        _teams = await TeamApi.GetAllAsync();
+        _assigneeTypes = await AssigneeTypeApi.GetAllAsync();
+        _cfAssigneeTypeId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _todos = await TodoApi.GetAllAsync(
+                _filterProjectId, _filterStatus, _search,
+                _filterTeamId, assigneeTypeId: _filterAssigneeTypeId);
+            _grouped = _todos
+                .GroupBy(t => t.ProjectId)
+                .Select(g => new ProjectGroup
+                {
+                    ProjectId = g.Key,
+                    Name = g.First().ProjectName,
+                    Color = g.First().ProjectColor,
+                    Items = g.OrderBy(t => t.SortOrder).ToList()
+                })
+                .OrderBy(g => _projects.FindIndex(p => p.Id == g.ProjectId))
+                .ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void ToggleCollapse(long projectId)
+    {
+        if (!_collapsed.Remove(projectId)) _collapsed.Add(projectId);
+    }
+
+    private void GoToDetail(long id) => Navigation.NavigateTo($"/todos/detail/{id}");
+
+    /// <summary>생성 다이얼로그 팀 변경 시 작업 분류 목록 갱신</summary>
+    private void OnCfTeamChanged()
+    {
+        var team = _teams.FirstOrDefault(t => t.Id == _cfTeamId);
+        _cfAvailableCategories = team?.WorkCategories ?? [];
+        if (_cfAvailableCategories.All(c => c.Id != _cfWorkCategoryId))
+            _cfWorkCategoryId = _cfAvailableCategories.FirstOrDefault()?.Id;
+        // 내 팀이면 Mine, 아니면 Others 자동 설정
+        if (team is not null)
+            _cfAssigneeTypeId = team.IsMine
+                ? _assigneeTypes.FirstOrDefault(at => at.IsMine)?.Id
+                : _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+    }
+
+    private void OpenCreateDialog()
+    {
+        _cf = new() { ProjectId = _filterProjectId ?? (_projects.Count > 0 ? _projects[0].Id : 0), Priority = TodoPriority.Normal };
+        _cfDue = null;
+        _cfTeamId = null;
+        _cfWorkCategoryId = null;
+        _cfAssigneeTypeId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+        _cfIsExternal = false;
+        _cfExternalLabel = null;
+        _cfAvailableCategories = [];
+        _dlgVisible = true;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_cf.Title)) { Snackbar.Add("제목을 입력하세요.", Severity.Warning); return; }
+        _saving = true;
+        try
+        {
+            _cf.DueDate = _cfDue;
+            // 팀/작업분류/담당유형 반영
+            _cf.TeamId = _cfTeamId;
+            _cf.WorkCategoryId = _cfWorkCategoryId;
+            _cf.AssigneeTypeId = _cfAssigneeTypeId;
+            _cf.IsExternal = _cfIsExternal;
+            _cf.ExternalLabel = _cfExternalLabel;
+            var created = await TodoApi.CreateAsync(_cf);
+            Snackbar.Add("생성되었습니다.", Severity.Success);
+            _dlgVisible = false;
+            if (created is not null) Navigation.NavigateTo($"/todos/detail/{created.Id}");
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    /// <summary>CSV 내보내기</summary>
+    private async Task ExportCsvAsync()
+    {
+        try
+        {
+            var data = await TodoApi.ExportCsvAsync(_filterProjectId, _filterStatus.HasValue ? (int)_filterStatus : null, _filterTeamId, null);
+            var base64 = Convert.ToBase64String(data);
+            var fileName = $"todos-export-{DateTime.Now:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("eval", $"{{ var a=document.createElement('a'); a.href='data:text/csv;base64,{base64}'; a.download='{fileName}'; a.click(); }}");
+            Snackbar.Add("CSV 파일이 다운로드됩니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"내보내기 실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteTodoAsync(TodoItemDto item)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("할일 삭제", $"'{item.Title}'을(를) 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+        try
+        {
+            await TodoApi.DeleteAsync(item.Id);
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"삭제 실패: {ex.Message}", Severity.Error); }
+    }
+
+    /// <summary>외부 일정 토글 → 타인 작업 강제</summary>
+    private void OnCfExternalChanged(bool val)
+    {
+        _cfIsExternal = val;
+        if (val) _cfAssigneeTypeId = _assigneeTypes.FirstOrDefault(at => !at.IsMine)?.Id;
+    }
+
+    // 드래그 앤 드롭 메서드
+    private void DragStart(TodoItemDto item, ProjectGroup group) { _dragging = item; _dragGroup = group; }
+    private void DragEnter(TodoItemDto item) { if (_dragging != null && _dragGroup?.Items.Contains(item) == true) _dragTarget = item; }
+    private void DragEnd() { _dragging = null; _dragTarget = null; }
+    private async Task Drop(TodoItemDto item, ProjectGroup group)
+    {
+        if (_dragging == null || _dragGroup != group || _dragging == item) { _dragging = null; _dragTarget = null; return; }
+        var list = group.Items;
+        list.Remove(_dragging);
+        var idx = list.IndexOf(item);
+        list.Insert(idx, _dragging);
+        _dragging = null; _dragTarget = null;
+        try { await TodoApi.ReorderAsync(list.Select(x => x.Id).ToList()); }
+        catch (Exception ex) { Snackbar.Add($"순서 변경 실패: {ex.Message}", Severity.Error); await LoadAsync(); }
+    }
+
+    static string StatusLabel(TodoStatus s) => s.ToKorean();
+    static Color StatusColor(TodoStatus s) => s switch { TodoStatus.InProgress => Color.Info, TodoStatus.Done => Color.Success, TodoStatus.Archived => Color.Dark, _ => Color.Default };
+    static Color OthersColor(OthersStatusHelper.ComputedStatus cs) => cs switch
+    {
+        OthersStatusHelper.ComputedStatus.InProgress => Color.Info,
+        OthersStatusHelper.ComputedStatus.Overdue => Color.Error,
+        OthersStatusHelper.ComputedStatus.Done => Color.Success,
+        OthersStatusHelper.ComputedStatus.EarlyDone => Color.Tertiary,
+        OthersStatusHelper.ComputedStatus.LateDone => Color.Warning,
+        _ => Color.Default
+    };
+    static string PriorityIcon(TodoPriority p) => p switch { TodoPriority.Low => Icons.Material.Filled.KeyboardArrowDown, TodoPriority.High => Icons.Material.Filled.KeyboardArrowUp, TodoPriority.Urgent => Icons.Material.Filled.PriorityHigh, _ => Icons.Material.Filled.Remove };
+    static Color PriorityColor(TodoPriority p) => p switch { TodoPriority.High => Color.Warning, TodoPriority.Urgent => Color.Error, _ => Color.Default };
+    static string PriorityLabel(TodoPriority p) => p.ToKorean();
+
+    private class ProjectGroup
+    {
+        public long ProjectId { get; set; }
+        public string Name { get; set; } = "";
+        public string Color { get; set; } = AppColors.UnassignedTeam;
+        public List<TodoItemDto> Items { get; set; } = [];
+    }
+}
