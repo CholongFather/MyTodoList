@@ -12,8 +12,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddDevTodoServices();
 builder.Services.AddHttpClient();
 
-// 버스 알림 백그라운드 서비스
 builder.Services.AddHostedService<BusNotificationBackgroundService>();
+builder.Services.AddHostedService<BackupSchedulerService>();
 
 // Controllers + Swagger
 builder.Services.AddControllers();

@@ -19,32 +19,42 @@ public class TeamApiClient(IHttpClientFactory factory)
     public async Task<TeamDto?> CreateAsync(CreateTeamRequest req)
     {
         var resp = await Http.PostAsJsonAsync(ApiRoutes.Teams, req);
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<TeamDto>();
     }
 
     public async Task<TeamDto?> UpdateAsync(long id, CreateTeamRequest req)
     {
         var resp = await Http.PutAsJsonAsync($"{ApiRoutes.Teams}/{id}", req);
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<TeamDto>();
     }
 
     public async Task DeleteAsync(long id)
-        => await Http.DeleteAsync($"{ApiRoutes.Teams}/{id}");
+    {
+        var resp = await Http.DeleteAsync($"{ApiRoutes.Teams}/{id}");
+        await resp.EnsureSuccessOrThrowAsync();
+    }
 
     // === 작업 분류 ===
 
     public async Task<WorkCategoryDto?> CreateCategoryAsync(long teamId, CreateWorkCategoryRequest req)
     {
         var resp = await Http.PostAsJsonAsync($"{ApiRoutes.Teams}/{teamId}/categories", req);
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<WorkCategoryDto>();
     }
 
     public async Task<WorkCategoryDto?> UpdateCategoryAsync(long id, CreateWorkCategoryRequest req)
     {
         var resp = await Http.PutAsJsonAsync($"{ApiRoutes.Teams}/categories/{id}", req);
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<WorkCategoryDto>();
     }
 
     public async Task DeleteCategoryAsync(long id)
-        => await Http.DeleteAsync($"{ApiRoutes.Teams}/categories/{id}");
+    {
+        var resp = await Http.DeleteAsync($"{ApiRoutes.Teams}/categories/{id}");
+        await resp.EnsureSuccessOrThrowAsync();
+    }
 }

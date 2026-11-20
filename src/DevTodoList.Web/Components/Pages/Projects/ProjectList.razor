@@ -1,4 +1,5 @@
 @page "/projects"
+@using DevTodoList.Shared.Enums
 
 @inject ProjectApiClient ProjectApi
 @inject ISnackbar Snackbar
@@ -17,6 +18,12 @@
     </MudButton>
 </div>
 
+<MudTabs @bind-ActivePanelIndex="_tabIndex" Elevation="0" Rounded ApplyEffectsToContainer Class="mb-4">
+    <MudTabPanel Text="@($"진행중 ({_projects.Count(p => p.Status == ProjectStatus.Active)})")" />
+    <MudTabPanel Text="@($"라이브 ({_projects.Count(p => p.Status == ProjectStatus.Live)})")" />
+    <MudTabPanel Text="@($"보관됨 ({_projects.Count(p => p.Status == ProjectStatus.Archived)})")" />
+</MudTabs>
+
 @if (_loading)
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate />
@@ -24,7 +31,7 @@
 else
 {
     <MudGrid Spacing="3">
-        @foreach (var project in _projects)
+        @foreach (var project in FilteredProjects)
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudCard Class="dtl-section" Elevation="0" Style="@($"border-top:4px solid {project.Color};")">
@@ -36,6 +43,18 @@ else
                             <MudText Typo="Typo.h6" Class="dtl-list-item" Style="flex:1; border:none; padding:0;" @onclick="@(() => Navigation.NavigateTo($"/projects/{project.Id}"))">@project.Name</MudText>
                             <MudMenu Icon="@Icons.Material.Filled.MoreVert">
                                 <MudMenuItem OnClick="() => OpenEditDialog(project)" Icon="@Icons.Material.Filled.Edit">수정</MudMenuItem>
+                                @if (project.Status != ProjectStatus.Active)
+                                {
+                                    <MudMenuItem OnClick="() => ChangeStatusAsync(project, ProjectStatus.Active)" Icon="@Icons.Material.Filled.PlayArrow" IconColor="Color.Primary">진행중으로 변경</MudMenuItem>
+                                }
+                                @if (project.Status != ProjectStatus.Live)
+                                {
+                                    <MudMenuItem OnClick="() => ChangeStatusAsync(project, ProjectStatus.Live)" Icon="@Icons.Material.Filled.Rocket" IconColor="Color.Success">라이브로 변경</MudMenuItem>
+                                }
+                                @if (project.Status != ProjectStatus.Archived)
+                                {
+                                    <MudMenuItem OnClick="() => ChangeStatusAsync(project, ProjectStatus.Archived)" Icon="@Icons.Material.Filled.Archive" IconColor="Color.Warning">보관</MudMenuItem>
+                                }
                                 <MudMenuItem OnClick="() => ConfirmDelete(project)" Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error">삭제</MudMenuItem>
                             </MudMenu>
                         </MudStack>
@@ -72,11 +91,19 @@ else
         }
     </MudGrid>
 
-    @if (_projects.Count == 0)
+    @if (!FilteredProjects.Any())
     {
         <MudPaper Class="dtl-section pa-8" Elevation="0" Style="text-align:center;">
             <MudIcon Icon="@Icons.Material.Filled.FolderOff" Size="Size.Large" Class="mud-text-secondary mb-2" />
-            <MudText Typo="Typo.body1" Class="mud-text-secondary">프로젝트가 없습니다. 새 프로젝트를 만들어보세요!</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                @(SelectedStatus switch
+                {
+                    ProjectStatus.Active => "진행중인 프로젝트가 없습니다.",
+                    ProjectStatus.Live => "라이브 프로젝트가 없습니다.",
+                    ProjectStatus.Archived => "보관된 프로젝트가 없습니다.",
+                    _ => "프로젝트가 없습니다."
+                })
+            </MudText>
         </MudPaper>
     }
 }
@@ -110,6 +137,10 @@ else
     private long _editId;
     private CreateProjectRequest _form = new();
     private MudColor _colorValue = new("#1976D2");
+    private int _tabIndex;
+
+    private ProjectStatus SelectedStatus => (ProjectStatus)_tabIndex;
+    private IEnumerable<ProjectDto> FilteredProjects => _projects.Where(p => p.Status == SelectedStatus);
 
     protected override async Task OnInitializedAsync() => await LoadProjectsAsync();
 
@@ -152,6 +183,18 @@ else
         }
         catch (Exception ex) { Snackbar.Add($"저장 실패: {ex.Message}", Severity.Error); }
         finally { _saving = false; }
+    }
+
+    private async Task ChangeStatusAsync(ProjectDto project, ProjectStatus status)
+    {
+        try
+        {
+            await ProjectApi.UpdateStatusAsync(project.Id, status);
+            var label = status switch { ProjectStatus.Active => "진행중", ProjectStatus.Live => "라이브", _ => "보관됨" };
+            Snackbar.Add($"'{project.Name}'을(를) {label}(으)로 변경했습니다.", Severity.Success);
+            await LoadProjectsAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"상태 변경 실패: {ex.Message}", Severity.Error); }
     }
 
     private async Task ConfirmDelete(ProjectDto project)

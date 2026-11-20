@@ -1,4 +1,5 @@
 using DevTodoList.Shared.Constants;
+using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Shared.DTOs;
 
@@ -9,7 +10,7 @@ public class ProjectDto
     public string? Description { get; set; }
     public string Color { get; set; } = AppColors.DefaultProject;
     public int SortOrder { get; set; }
-    public bool IsArchived { get; set; }
+    public ProjectStatus Status { get; set; }
     public int TodoCount { get; set; }
     public int ActiveCount { get; set; }
     public DateTime CreatedAt { get; set; }

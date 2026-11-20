@@ -1,4 +1,4 @@
-// 간트차트 스크롤 동기화 (4-quadrant 레이아웃)
+// 간트차트 스크롤 헬퍼
 window.ganttScrollSync = {
     _disposed: false,
     _handler: null,
@@ -21,5 +21,15 @@ window.ganttScrollSync = {
             rightBody.removeEventListener('scroll', this._handler);
         }
         this._handler = null;
+    },
+
+    // 오늘 날짜 위치로 가로 스크롤
+    scrollToToday: function (containerSelector, leftColWidth, todayOffsetPx) {
+        var el = document.querySelector(containerSelector);
+        if (!el) return;
+        // 오늘 기준선이 화면 중앙~좌측 1/3에 오도록
+        var viewWidth = el.clientWidth - leftColWidth;
+        var scrollTarget = todayOffsetPx - (viewWidth * 0.3);
+        el.scrollLeft = Math.max(0, scrollTarget);
     }
 };

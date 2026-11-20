@@ -30,16 +30,12 @@ public class GanttService(AppDbContext db)
         if (assigneeType.HasValue)
             query = query.Where(x => x.AssigneeType == assigneeType);
 
-        var items = await query.OrderBy(x => x.StartDate ?? x.CreatedAt).ToListAsync(ct);
-
-        var result = items.Select(x => x.ToGanttDto()).ToList();
-
-        // 날짜 범위 필터
         if (fromDate.HasValue)
-            result = result.Where(x => x.EndDate >= fromDate.Value).ToList();
+            query = query.Where(x => (x.EndDate ?? x.DueDate ?? x.CreatedAt.AddDays(1)) >= fromDate.Value);
         if (toDate.HasValue)
-            result = result.Where(x => x.StartDate <= toDate.Value).ToList();
+            query = query.Where(x => (x.StartDate ?? x.CreatedAt) <= toDate.Value);
 
-        return result;
+        var items = await query.OrderBy(x => x.StartDate ?? x.CreatedAt).ToListAsync(ct);
+        return items.Select(x => x.ToGanttDto()).ToList();
     }
 }

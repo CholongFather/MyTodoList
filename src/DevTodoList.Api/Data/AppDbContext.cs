@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<TodoWorkerEntity> TodoWorkers => Set<TodoWorkerEntity>();
     public DbSet<NoteTypeEntity> NoteTypes => Set<NoteTypeEntity>();
     public DbSet<LinkTypeEntity> LinkTypes => Set<LinkTypeEntity>();
+    public DbSet<DatabaseBackupEntity> DatabaseBackups => Set<DatabaseBackupEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

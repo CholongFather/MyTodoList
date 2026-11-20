@@ -55,8 +55,8 @@
             <MudSelectItem T="HolidayType" Value="HolidayType.PublicHoliday">공휴일</MudSelectItem>
             <MudSelectItem T="HolidayType" Value="HolidayType.PersonalLeave">연차</MudSelectItem>
         </MudSelect>
-        <MudDatePicker @bind-Date="_newDate" Label="날짜" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" Style="max-width:160px;"
-                       AnchorOrigin="Origin.TopLeft" TransformOrigin="Origin.BottomLeft" />
+        <MudDatePicker @bind-Date="_newDate" Label="날짜" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="yyyy-MM-dd"
+                       PickerVariant="PickerVariant.Dialog" Style="min-width:160px; max-width:200px;" />
         <MudTextField T="string" @bind-Value="_newName" Label="이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
         <MudCheckBox T="bool" @bind-Value="_newRecurring" Label="매년 반복" Dense />
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync"
@@ -112,6 +112,11 @@
     private async Task AddAsync()
     {
         if (_newDate is null || string.IsNullOrWhiteSpace(_newName)) return;
+        if (_holidays.Any(h => h.Date.Date == _newDate.Value.Date))
+        {
+            Snackbar.Add($"'{_newDate.Value:yyyy-MM-dd}'에 이미 등록된 휴일이 있습니다.", Severity.Warning);
+            return;
+        }
         try
         {
             await HolidayApi.CreateAsync(new CreateHolidayRequest { Date = _newDate.Value, Name = _newName, IsRecurring = _newRecurring, HolidayType = _newType });

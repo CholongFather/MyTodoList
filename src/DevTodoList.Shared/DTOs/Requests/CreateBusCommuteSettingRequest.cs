@@ -23,6 +23,7 @@ public class CreateBusCommuteSettingRequest
     public string MonitoringEndTime { get; set; } = BusCommuteDefaults.MonitoringEndTime;
     public int AlertMinutesBefore { get; set; } = BusCommuteDefaults.AlertMinutesBefore;
     public string AlertThresholds { get; set; } = BusCommuteDefaults.AlertThresholds;
+    public int CheckIntervalSeconds { get; set; } = 30;
     public bool IsEnabled { get; set; } = BusCommuteDefaults.IsEnabled;
     public int ActiveDays { get; set; } = BusCommuteDefaults.ActiveDays;
     public long? BusStationId { get; set; }

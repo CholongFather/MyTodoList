@@ -80,6 +80,9 @@ namespace DevTodoList.Api.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("CheckIntervalSeconds")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("CommuteType")
                         .HasColumnType("INTEGER");
 
@@ -327,6 +330,45 @@ namespace DevTodoList.Api.Migrations
                     b.ToTable("CaseNotes");
                 });
 
+            modelBuilder.Entity("DevTodoList.Api.Data.Entities.DatabaseBackupEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BackupPath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BackupType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DatabaseBackups");
+                });
+
             modelBuilder.Entity("DevTodoList.Api.Data.Entities.EnvironmentEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -417,6 +459,10 @@ namespace DevTodoList.Api.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UrlPattern")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -526,15 +572,15 @@ namespace DevTodoList.Api.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsArchived")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAt")

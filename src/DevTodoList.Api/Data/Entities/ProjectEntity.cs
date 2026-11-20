@@ -19,7 +19,9 @@ public class ProjectEntity : EntityBase
     public string Color { get; set; } = AppColors.DefaultProject;
 
     public int SortOrder { get; set; }
-    public bool IsArchived { get; set; }
+
+    /// <summary>프로젝트 상태 (0=Active, 1=Live, 2=Archived)</summary>
+    public int Status { get; set; }
 
     public ICollection<TodoItemEntity> TodoItems { get; set; } = [];
     public ICollection<ProjectMetaEntity> Metas { get; set; } = [];

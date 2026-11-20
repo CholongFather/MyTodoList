@@ -15,9 +15,13 @@ public class EnvironmentApiClient(IHttpClientFactory factory)
     public async Task<EnvironmentDto?> CreateAsync(CreateEnvironmentRequest req)
     {
         var resp = await Http.PostAsJsonAsync("api/environments", req);
+        await resp.EnsureSuccessOrThrowAsync();
         return await resp.Content.ReadFromJsonAsync<EnvironmentDto>();
     }
 
     public async Task DeleteAsync(long id)
-        => await Http.DeleteAsync($"api/environments/{id}");
+    {
+        var resp = await Http.DeleteAsync($"api/environments/{id}");
+        await resp.EnsureSuccessOrThrowAsync();
+    }
 }

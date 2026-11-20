@@ -2,6 +2,7 @@ using DevTodoList.Api.Data;
 using DevTodoList.Api.Data.Entities;
 using DevTodoList.Shared.DTOs;
 using DevTodoList.Shared.DTOs.Requests;
+using DevTodoList.Shared.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevTodoList.Api.Services;
@@ -79,6 +80,18 @@ public class ProjectService(AppDbContext db)
             }
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<ProjectDto?> UpdateStatusAsync(long id, ProjectStatus status, CancellationToken ct = default)
+    {
+        var entity = await db.Projects.Include(p => p.TodoItems).Include(p => p.Metas)
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (entity is null) return null;
+
+        entity.Status = (int)status;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return entity.ToDto();
     }
 
     // === 프로젝트 메타 CRUD ===

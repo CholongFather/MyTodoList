@@ -15,7 +15,7 @@ public static class MappingExtensions
         Description = e.Description,
         Color = e.Color,
         SortOrder = e.SortOrder,
-        IsArchived = e.IsArchived,
+        Status = (ProjectStatus)e.Status,
         TodoCount = e.TodoItems?.Count ?? 0,
         ActiveCount = e.TodoItems?.Count(t => t.Status < (int)TodoStatus.Done) ?? 0,
         CreatedAt = e.CreatedAt,
@@ -129,6 +129,7 @@ public static class MappingExtensions
         MonitoringEndTime = e.MonitoringEndTime,
         AlertMinutesBefore = e.AlertMinutesBefore,
         AlertThresholds = e.AlertThresholds,
+        CheckIntervalSeconds = e.CheckIntervalSeconds,
         IsEnabled = e.IsEnabled,
         ActiveDays = e.ActiveDays,
         LastNotifiedAt = e.LastNotifiedAt,
@@ -255,7 +256,18 @@ public static class MappingExtensions
         Name = e.Name,
         Color = e.Color,
         Icon = e.Icon,
+        UrlPattern = e.UrlPattern,
         SortOrder = e.SortOrder
+    };
+
+    public static DatabaseBackupDto ToDto(this DatabaseBackupEntity e) => new()
+    {
+        Id = e.Id,
+        FileName = e.FileName,
+        FileSizeBytes = e.FileSizeBytes,
+        BackupType = e.BackupType,
+        Description = e.Description,
+        CreatedAt = e.CreatedAt
     };
 
     public static GanttItemDto ToGanttDto(this TodoItemEntity e) => new()

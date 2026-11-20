@@ -2,25 +2,9 @@ using DevTodoList.Shared.DTOs;
 
 namespace DevTodoList.Shared.Helpers;
 
-/// <summary>URL 패턴으로 링크 유형 자동 감지</summary>
+/// <summary>URL 패턴으로 링크 유형 자동 감지 (DB 설정 기반)</summary>
 public static class LinkTypeDetector
 {
-    /// <summary>도메인 키워드 → 링크 유형 이름 매핑</summary>
-    private static readonly (string Pattern, string TypeName)[] Rules =
-    [
-        ("jira", "Jira"),
-        ("atlassian.net/browse", "Jira"),
-        ("atlassian.net/jira", "Jira"),
-        ("confluence", "Confluence"),
-        ("notion.so", "Notion"),
-        ("notion.site", "Notion"),
-        ("github.com", "GitHub"),
-        ("gitlab.com", "GitLab"),
-        ("gitlab.", "GitLab"),
-        ("figma.com", "Figma"),
-        ("slack.com", "Slack"),
-    ];
-
     /// <summary>URL에서 매칭되는 LinkType을 찾아 ID 반환 (없으면 null)</summary>
     public static long? Detect(string? url, List<LinkTypeDto> linkTypes)
     {
@@ -28,12 +12,15 @@ public static class LinkTypeDetector
             return null;
 
         var lower = url.ToLowerInvariant();
-        foreach (var (pattern, typeName) in Rules)
+        foreach (var lt in linkTypes)
         {
-            if (!lower.Contains(pattern)) continue;
-            var match = linkTypes.FirstOrDefault(lt =>
-                lt.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase));
-            if (match != null) return match.Id;
+            if (string.IsNullOrWhiteSpace(lt.UrlPattern)) continue;
+            var patterns = lt.UrlPattern.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var pattern in patterns)
+            {
+                if (lower.Contains(pattern.ToLowerInvariant()))
+                    return lt.Id;
+            }
         }
 
         return null;

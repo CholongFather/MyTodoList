@@ -28,3 +28,6 @@ Thumbs.db
 ## Publish / Temp
 publish/
 temp_*.json
+
+## Local MCP
+.mcp.json

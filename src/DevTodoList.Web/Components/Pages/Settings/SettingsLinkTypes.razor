@@ -18,7 +18,7 @@
     else
     {
         <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
-            <thead><tr><th style="width:40px;">색상</th><th style="width:40px;">아이콘</th><th>이름</th><th style="width:120px;"></th></tr></thead>
+            <thead><tr><th style="width:40px;">색상</th><th style="width:40px;">아이콘</th><th>이름</th><th>URL 감지 패턴</th><th style="width:120px;"></th></tr></thead>
             <tbody>
                 @foreach (var lt in _linkTypes)
                 {
@@ -45,6 +45,17 @@
                                 @item.Name
                             }
                         </td>
+                        <td>
+                            @if (_editingId == item.Id)
+                            {
+                                <MudTextField T="string" @bind-Value="_editUrlPattern" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                              Placeholder="쉼표로 구분 (예: jira,atlassian.net)" Style="min-width:200px;" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Style="color:var(--mud-palette-text-secondary);font-size:0.8rem;">@(item.UrlPattern ?? "—")</MudText>
+                            }
+                        </td>
                         <td style="text-align:right;">
                             @if (_editingId != item.Id)
                             {
@@ -64,6 +75,7 @@
             <MudSelect T="string" @bind-Value="_newIcon" Label="아이콘" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" Dense AnchorOrigin="Origin.BottomCenter">
                 @foreach (var ic in _iconOptions) { <MudSelectItem T="string" Value="@ic.Value"><MudIcon Icon="@ic.Value" Size="Size.Small" Class="mr-1" /> @ic.Label</MudSelectItem> }
             </MudSelect>
+            <MudTextField T="string" @bind-Value="_newUrlPattern" Label="URL 패턴" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" Placeholder="쉼표 구분" />
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
         </MudStack>
     }
@@ -72,11 +84,12 @@
 @code {
     private List<LinkTypeDto> _linkTypes = [];
     private bool _loading = true;
+    private bool _saving;
     private string _newName = "", _newColor = "";
-    private string? _newIcon;
+    private string? _newIcon, _newUrlPattern;
     private long? _editingId;
     private string _editName = "", _editColor = "";
-    private string? _editIcon;
+    private string? _editIcon, _editUrlPattern;
 
     // 링크 유형에 적합한 아이콘 목록
     private static readonly (string Value, string Label)[] _iconOptions =
@@ -97,6 +110,7 @@
         (Icons.Material.Filled.CloudQueue, "클라우드"),
         (Icons.Material.Filled.Terminal, "터미널"),
         (Icons.Material.Filled.DataObject, "데이터"),
+        (Icons.Material.Filled.Chat, "채팅"),
     ];
 
     private static string RandomColor() => ColorPalettes.Random();
@@ -109,35 +123,41 @@
 
     private async Task LoadAsync()
     {
-        try { _linkTypes = await LinkTypeApi.GetAllAsync(); } catch { } finally { _loading = false; }
+        try { _linkTypes = await LinkTypeApi.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"목록 로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
     }
 
     private async Task AddAsync()
     {
-        if (string.IsNullOrWhiteSpace(_newName)) return;
+        if (string.IsNullOrWhiteSpace(_newName) || _saving) return;
+        _saving = true;
         try
         {
-            await LinkTypeApi.CreateAsync(new CreateLinkTypeRequest { Name = _newName, Color = _newColor, Icon = _newIcon });
+            await LinkTypeApi.CreateAsync(new CreateLinkTypeRequest { Name = _newName, Color = _newColor, Icon = _newIcon, UrlPattern = _newUrlPattern });
             _newName = "";
             _newColor = RandomColor();
             _newIcon = null;
+            _newUrlPattern = null;
             await LoadAsync();
             Snackbar.Add("링크 유형이 추가되었습니다.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
     }
 
-    private void StartEdit(LinkTypeDto lt) { _editingId = lt.Id; _editName = lt.Name; _editColor = lt.Color; _editIcon = lt.Icon; }
+    private void StartEdit(LinkTypeDto lt) { _editingId = lt.Id; _editName = lt.Name; _editColor = lt.Color; _editIcon = lt.Icon; _editUrlPattern = lt.UrlPattern; }
     private void CancelEdit() => _editingId = null;
 
     private async Task SaveEditAsync(LinkTypeDto lt)
     {
         try
         {
-            await LinkTypeApi.UpdateAsync(lt.Id, new CreateLinkTypeRequest { Name = _editName, Color = _editColor, Icon = _editIcon });
+            await LinkTypeApi.UpdateAsync(lt.Id, new CreateLinkTypeRequest { Name = _editName, Color = _editColor, Icon = _editIcon, UrlPattern = _editUrlPattern });
             lt.Name = _editName;
             lt.Color = _editColor;
             lt.Icon = _editIcon;
+            lt.UrlPattern = _editUrlPattern;
             _editingId = null;
             Snackbar.Add("수정되었습니다.", Severity.Success);
         }

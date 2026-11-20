@@ -318,6 +318,7 @@ else
     private List<NoteTypeDto> _noteTypes = [];
     private List<LinkTypeDto> _linkTypes = [];
     private List<WorkerDto> _workers = [];
+    private string _meAuthor = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -334,7 +335,7 @@ else
                 {
                     _workers = t.Result;
                     var me = _workers.FirstOrDefault(w => w.IsMe);
-                    if (me != null) _noteForm.Author = me.Name;
+                    if (me != null) { _meAuthor = me.Name; _noteForm.Author = me.Name; }
                 }));
         }
         catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
@@ -426,7 +427,7 @@ else
                 await CaseApi.CreateNoteAsync(Id, _noteForm);
                 Snackbar.Add("노트가 추가되었습니다.", Severity.Success);
             }
-            _noteForm = new() { Author = "hugo" };
+            _noteForm = new() { Author = _meAuthor };
             _editingNoteId = null;
             _case = await CaseApi.GetByIdAsync(Id);
         }
@@ -449,7 +450,7 @@ else
     private void CancelNoteEdit()
     {
         _editingNoteId = null;
-        _noteForm = new() { Author = "hugo" };
+        _noteForm = new() { Author = _meAuthor };
     }
 
     private async Task DeleteNoteAsync(CaseNoteDto note)

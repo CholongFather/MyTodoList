@@ -1,0 +1,220 @@
+@page "/tools/axure"
+@using System.Security.Cryptography
+@using System.Text
+
+<PageTitle>Axure URL 도구</PageTitle>
+
+<div class="dtl-page-header">
+    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">Axure URL 도구</MudText>
+    </MudStack>
+</div>
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Axure 프로토타입 URL에 접근 코드(암호)를 내장하여 암호 입력 없이 바로 접근할 수 있는 링크를 생성합니다.
+</MudText>
+
+<MudGrid Spacing="3">
+    @* 코드 내장 URL 생성 *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 dtl-section" Elevation="0">
+            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight:600;">
+                <MudIcon Icon="@Icons.Material.Filled.VpnKey" Size="Size.Small" Class="mr-1" />
+                코드 내장 URL 생성
+            </MudText>
+
+            <MudTextField @bind-Value="_baseUrl" Label="Axure 기본 URL" Placeholder="https://xxxxx.axshare.com/"
+                          Variant="Variant.Outlined" Immediate Class="mb-3"
+                          HelperText="axshare.com 주소를 입력하세요" />
+
+            <MudTextField @bind-Value="_accessCode" Label="접근 코드 (암호)" Placeholder="프로토타입 암호 입력"
+                          Variant="Variant.Outlined" Immediate Class="mb-3"
+                          InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GenerateUrl"
+                       Disabled="@(string.IsNullOrWhiteSpace(_baseUrl) || string.IsNullOrWhiteSpace(_accessCode))"
+                       StartIcon="@Icons.Material.Filled.Link" FullWidth>
+                URL 생성
+            </MudButton>
+
+            @if (!string.IsNullOrWhiteSpace(_generatedUrl))
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-3" Dense>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Style="font-weight:600;">생성된 URL (암호 없이 접근 가능)</MudText>
+                        <MudTextField Value="@_generatedUrl" ReadOnly Variant="Variant.Text"
+                                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                      OnAdornmentClick="@(() => CopyToClipboard(_generatedUrl))"
+                                      Style="font-size:0.85rem;" />
+                    </MudStack>
+                </MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* URL 분석 *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 dtl-section" Elevation="0">
+            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight:600;">
+                <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" Class="mr-1" />
+                URL 분석
+            </MudText>
+
+            <MudTextField @bind-Value="_analyzeUrl" Label="Axure URL 붙여넣기" Placeholder="https://xxxxx.axshare.com/?code=..."
+                          Variant="Variant.Outlined" Immediate Class="mb-3"
+                          HelperText="code 파라미터 포함 여부를 확인합니다" />
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="AnalyzeUrl"
+                       Disabled="@string.IsNullOrWhiteSpace(_analyzeUrl)"
+                       StartIcon="@Icons.Material.Filled.Analytics" FullWidth>
+                분석
+            </MudButton>
+
+            @if (_analyzeResult is not null)
+            {
+                <MudAlert Severity="@_analyzeResult.Severity" Class="mt-3" Dense>
+                    <MudText Typo="Typo.body2">@_analyzeResult.Message</MudText>
+                    @if (_analyzeResult.CodeValue is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mt-1">
+                            code: <code>@_analyzeResult.CodeValue</code>
+                        </MudText>
+                    }
+                </MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* 사용법 안내 *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4 dtl-section" Elevation="0">
+            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight:600;">
+                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mr-1" />
+                사용법
+            </MudText>
+            <MudList T="string" Dense>
+                <MudListItem Icon="@Icons.Material.Filled.ChevronRight">
+                    Axure Cloud에서 프로토타입에 접근 코드(암호)를 설정하면, 공유 링크 접속 시 암호를 입력해야 합니다.
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.ChevronRight">
+                    <b>코드 내장 URL</b>은 암호의 MD5 해시를 URL에 포함하여, 링크를 클릭하면 암호 입력 없이 바로 프로토타입에 접근할 수 있습니다.
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.ChevronRight">
+                    형식: <code>https://xxx.axshare.com/?code=MD5해시값</code>
+                </MudListItem>
+            </MudList>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private string? _baseUrl;
+    private string? _accessCode;
+    private bool _showPassword;
+    private string? _generatedUrl;
+
+    private string? _analyzeUrl;
+    private AnalyzeResultModel? _analyzeResult;
+
+    /// <summary>접근 코드를 MD5 해싱하여 code 파라미터 내장 URL 생성</summary>
+    private void GenerateUrl()
+    {
+        if (string.IsNullOrWhiteSpace(_baseUrl) || string.IsNullOrWhiteSpace(_accessCode))
+            return;
+
+        var url = _baseUrl.Trim();
+        if (!Uri.TryCreate(url.Contains("://") ? url : "https://" + url, UriKind.Absolute, out var uri))
+        {
+            Snackbar.Add("유효한 URL이 아닙니다.", Severity.Warning);
+            return;
+        }
+
+        // axshare.com 도메인 확인 (호스트 기준)
+        if (!IsAxshareHost(uri))
+        {
+            Snackbar.Add("axshare.com 도메인이 아닙니다.", Severity.Warning);
+            return;
+        }
+
+        // 기존 code 파라미터 제거
+        var baseUrlClean = uri.GetLeftPart(UriPartial.Path);
+
+        // MD5 해시 생성
+        var hash = ComputeMd5Hash(_accessCode.Trim());
+        _generatedUrl = $"{baseUrlClean}?code={hash}";
+    }
+
+    /// <summary>URL에서 code 파라미터 추출 및 분석</summary>
+    private void AnalyzeUrl()
+    {
+        if (string.IsNullOrWhiteSpace(_analyzeUrl))
+            return;
+
+        var url = _analyzeUrl.Trim();
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            _analyzeResult = new("유효한 URL이 아닙니다.", Severity.Error, null);
+            return;
+        }
+
+        if (!IsAxshareHost(uri))
+        {
+            _analyzeResult = new("axshare.com 도메인이 아닙니다.", Severity.Warning, null);
+            return;
+        }
+
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var code = query["code"];
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            _analyzeResult = new(
+                "코드가 내장된 URL입니다. 암호 입력 없이 바로 접근할 수 있습니다.",
+                Severity.Success,
+                code);
+        }
+        else
+        {
+            _analyzeResult = new(
+                "코드가 없는 URL입니다. 접근 시 암호 입력이 필요합니다.",
+                Severity.Info,
+                null);
+        }
+    }
+
+    /// <summary>MD5 해시 계산</summary>
+    private static string ComputeMd5Hash(string input)
+    {
+        var bytes = MD5.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexStringLower(bytes);
+    }
+
+    /// <summary>호스트가 axshare.com 또는 그 하위 도메인인지 확인</summary>
+    private static bool IsAxshareHost(Uri uri)
+        => (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+           && (uri.Host.Equals("axshare.com", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".axshare.com", StringComparison.OrdinalIgnoreCase));
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("클립보드에 복사되었습니다.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            // navigator.clipboard는 HTTPS 또는 localhost에서만 동작
+            Snackbar.Add("복사에 실패했습니다. 생성된 URL 입력란에서 직접 복사하세요. (HTTPS 또는 localhost에서만 자동 복사 가능)", Severity.Warning);
+        }
+    }
+
+    private record AnalyzeResultModel(string Message, Severity Severity, string? CodeValue);
+}

@@ -40,6 +40,7 @@ public class BusCommuteService(AppDbContext db)
             MonitoringEndTime = req.MonitoringEndTime,
             AlertMinutesBefore = req.AlertMinutesBefore,
             AlertThresholds = req.AlertThresholds,
+            CheckIntervalSeconds = req.CheckIntervalSeconds > 0 ? req.CheckIntervalSeconds : 30,
             IsEnabled = req.IsEnabled,
             ActiveDays = req.ActiveDays,
             BusStationId = req.BusStationId
@@ -68,6 +69,7 @@ public class BusCommuteService(AppDbContext db)
         entity.MonitoringEndTime = req.MonitoringEndTime;
         entity.AlertMinutesBefore = req.AlertMinutesBefore;
         entity.AlertThresholds = req.AlertThresholds;
+        entity.CheckIntervalSeconds = req.CheckIntervalSeconds > 0 ? req.CheckIntervalSeconds : 30;
         entity.IsEnabled = req.IsEnabled;
         entity.ActiveDays = req.ActiveDays;
         entity.BusStationId = req.BusStationId;

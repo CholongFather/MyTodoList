@@ -21,7 +21,16 @@ public class HolidaysController(HolidayService svc) : ControllerBase
     /// <summary>공휴일 추가</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateHolidayRequest req, CancellationToken ct)
-        => Ok(await svc.CreateAsync(req, ct));
+    {
+        try
+        {
+            return Ok(await svc.CreateAsync(req, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
 
     /// <summary>공휴일 삭제</summary>
     [HttpDelete("{id:long}")]

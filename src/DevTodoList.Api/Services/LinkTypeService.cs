@@ -12,7 +12,8 @@ public class LinkTypeService(AppDbContext db)
     public async Task<List<LinkTypeDto>> GetAllAsync(CancellationToken ct = default)
         => await db.LinkTypes.OrderBy(l => l.SortOrder).Select(l => new LinkTypeDto
         {
-            Id = l.Id, Name = l.Name, Color = l.Color, Icon = l.Icon, SortOrder = l.SortOrder
+            Id = l.Id, Name = l.Name, Color = l.Color, Icon = l.Icon,
+            UrlPattern = l.UrlPattern, SortOrder = l.SortOrder
         }).ToListAsync(ct);
 
     public async Task<LinkTypeDto> CreateAsync(CreateLinkTypeRequest req, CancellationToken ct = default)
@@ -23,6 +24,7 @@ public class LinkTypeService(AppDbContext db)
             Name = req.Name,
             Color = req.Color,
             Icon = req.Icon,
+            UrlPattern = req.UrlPattern,
             SortOrder = maxOrder + 1,
             CreatedAt = DateTime.UtcNow
         };
@@ -38,6 +40,7 @@ public class LinkTypeService(AppDbContext db)
         entity.Name = req.Name;
         entity.Color = req.Color;
         entity.Icon = req.Icon;
+        entity.UrlPattern = req.UrlPattern;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return entity.ToDto();

@@ -1,5 +1,6 @@
 using DevTodoList.Api.Services;
 using DevTodoList.Shared.DTOs.Requests;
+using DevTodoList.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DevTodoList.Api.Controllers;
@@ -39,6 +40,16 @@ public class ProjectsController(ProjectService svc) : ControllerBase
     {
         await svc.ReorderAsync(req, ct);
         return NoContent();
+    }
+
+    [HttpPut("{id:long}/status")]
+    public async Task<IActionResult> UpdateStatus(long id, [FromBody] UpdateProjectStatusRequest req, CancellationToken ct)
+    {
+        if (!Enum.IsDefined(req.Status))
+            return BadRequest(new { message = $"알 수 없는 프로젝트 상태입니다: {(int)req.Status}" });
+
+        var result = await svc.UpdateStatusAsync(id, req.Status, ct);
+        return result is null ? NotFound() : Ok(result);
     }
 
     // === 프로젝트 메타 (URL/버전/비밀번호) ===

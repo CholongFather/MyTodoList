@@ -17,5 +17,9 @@ public class LinkTypeEntity : EntityBase
     [MaxLength(50)]
     public string? Icon { get; set; }
 
+    /// <summary>URL 자동감지 패턴 (쉼표 구분, 예: "jira,atlassian.net/browse")</summary>
+    [MaxLength(500)]
+    public string? UrlPattern { get; set; }
+
     public int SortOrder { get; set; }
 }

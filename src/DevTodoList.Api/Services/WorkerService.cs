@@ -17,6 +17,12 @@ public class WorkerService(AppDbContext db)
 
     public async Task<WorkerDto> CreateAsync(CreateWorkerRequest req, CancellationToken ct = default)
     {
+        if (req.IsMe)
+        {
+            var others = await db.Workers.Where(w => w.IsMe).ToListAsync(ct);
+            foreach (var o in others) o.IsMe = false;
+        }
+
         var maxOrder = await db.Workers.MaxAsync(w => (int?)w.SortOrder, ct) ?? 0;
         var entity = new WorkerEntity
         {

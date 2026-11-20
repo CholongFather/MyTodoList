@@ -32,15 +32,20 @@ public class HolidayService(AppDbContext db)
             .ToListAsync(ct);
     }
 
-    /// <summary>특정 날짜가 공휴일 또는 연차인지 확인</summary>
+    /// <summary>특정 날짜가 공휴일 또는 연차인지 확인 (반복 공휴일은 월/일 매칭)</summary>
     public async Task<bool> IsHolidayOrLeaveAsync(DateTime date, CancellationToken ct = default)
     {
-        return await db.Holidays.AnyAsync(h => h.Date.Date == date.Date, ct);
+        return await db.Holidays.AnyAsync(h =>
+            h.Date.Date == date.Date ||
+            (h.IsRecurring && h.Date.Month == date.Month && h.Date.Day == date.Day), ct);
     }
 
-    /// <summary>휴일 추가</summary>
+    /// <summary>휴일 추가 (같은 날짜 중복 방지)</summary>
     public async Task<HolidayDto> CreateAsync(CreateHolidayRequest req, CancellationToken ct = default)
     {
+        var exists = await db.Holidays.AnyAsync(h => h.Date.Date == req.Date.Date, ct);
+        if (exists) throw new InvalidOperationException($"'{req.Date:yyyy-MM-dd}'에 이미 등록된 휴일이 있습니다.");
+
         var entity = new HolidayEntity { Date = req.Date.Date, Name = req.Name, IsRecurring = req.IsRecurring, HolidayType = (int)req.HolidayType };
         db.Holidays.Add(entity);
         await db.SaveChangesAsync(ct);

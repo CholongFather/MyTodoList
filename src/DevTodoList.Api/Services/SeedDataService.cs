@@ -9,6 +9,14 @@ public static class SeedDataService
 {
     public static async Task SeedAsync(AppDbContext db)
     {
+        // === IsMe 작업자 중복 정리 (IsMe는 한 명만 가능) ===
+        var isMeWorkers = await db.Workers.Where(w => w.IsMe).OrderBy(w => w.SortOrder).ToListAsync();
+        if (isMeWorkers.Count > 1)
+        {
+            foreach (var w in isMeWorkers.Skip(1)) w.IsMe = false;
+            await db.SaveChangesAsync();
+        }
+
         // === 버스 정류장 마스터 시드 ===
         if (!await db.BusStations.AnyAsync())
         {
@@ -50,6 +58,24 @@ public static class SeedDataService
             await db.SaveChangesAsync();
         }
 
+        // 잠실광역환승센터 회차 정류장 (신규 DB와 기존 DB 모두 이 경로로 추가)
+        if (!await db.BusStations.AnyAsync(s => s.GbisStationId == "123000611" && s.GbisRouteId == "233000322"))
+        {
+            var maxSort = await db.BusStations.MaxAsync(s => (int?)s.SortOrder) ?? 0;
+            db.BusStations.Add(new BusStationEntity
+            {
+                Name = "잠실광역환승센터(지하) - G6009 회차",
+                BusStopName = "잠실광역환승센터(지하)",
+                BusRouteNumber = "G6009",
+                GbisStationId = "123000611",
+                GbisRouteId = "233000322",
+                GbisStaOrder = 29,
+                Direction = 0,
+                SortOrder = maxSort + 1
+            });
+            await db.SaveChangesAsync();
+        }
+
         // === 노트 유형 시드 ===
         if (!await db.NoteTypes.AnyAsync())
         {
@@ -76,11 +102,15 @@ public static class SeedDataService
         if (!await db.LinkTypes.AnyAsync())
         {
             db.LinkTypes.AddRange(
-                new LinkTypeEntity { Name = "Jira", Color = "#2196F3", Icon = "BugReport", SortOrder = 1 },
-                new LinkTypeEntity { Name = "Confluence", Color = "#FF9800", Icon = "MenuBook", SortOrder = 2 },
-                new LinkTypeEntity { Name = "GitHub", Color = "#333333", Icon = "Code", SortOrder = 3 },
-                new LinkTypeEntity { Name = "GitLab", Color = "#FC6D26", Icon = "Code", SortOrder = 4 },
-                new LinkTypeEntity { Name = "기타", Color = "#9E9E9E", Icon = "Link", SortOrder = 5 }
+                new LinkTypeEntity { Name = "Jira", Color = "#2196F3", Icon = "BugReport", UrlPattern = "jira,atlassian.net/browse,atlassian.net/jira", SortOrder = 1 },
+                new LinkTypeEntity { Name = "Confluence", Color = "#FF9800", Icon = "MenuBook", UrlPattern = "confluence", SortOrder = 2 },
+                new LinkTypeEntity { Name = "Notion", Color = "#000000", Icon = "Description", UrlPattern = "notion.so,notion.site", SortOrder = 3 },
+                new LinkTypeEntity { Name = "GitHub", Color = "#333333", Icon = "Code", UrlPattern = "github.com", SortOrder = 4 },
+                new LinkTypeEntity { Name = "GitLab", Color = "#FC6D26", Icon = "Code", UrlPattern = "gitlab.com,gitlab.", SortOrder = 5 },
+                new LinkTypeEntity { Name = "Figma", Color = "#A259FF", Icon = "Dashboard", UrlPattern = "figma.com", SortOrder = 6 },
+                new LinkTypeEntity { Name = "Axure", Color = "#00A5E6", Icon = "Dashboard", UrlPattern = "axshare.com", SortOrder = 7 },
+                new LinkTypeEntity { Name = "Slack", Color = "#4A154B", Icon = "Chat", UrlPattern = "slack.com", SortOrder = 8 },
+                new LinkTypeEntity { Name = "기타", Color = "#9E9E9E", Icon = "Link", SortOrder = 9 }
             );
             await db.SaveChangesAsync();
 
@@ -99,6 +129,38 @@ public static class SeedDataService
                     link.LinkTypeId = typeId;
             }
             if (unmappedCaseLinks.Count + unmappedTodoLinks.Count > 0) await db.SaveChangesAsync();
+        }
+        else
+        {
+            var defaultPatterns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Jira"] = "jira,atlassian.net/browse,atlassian.net/jira",
+                ["Confluence"] = "confluence",
+                ["Notion"] = "notion.so,notion.site",
+                ["GitHub"] = "github.com",
+                ["GitLab"] = "gitlab.com,gitlab.",
+                ["Figma"] = "figma.com",
+                ["Axure"] = "axshare.com",
+                ["Slack"] = "slack.com"
+            };
+            var emptyPatterns = await db.LinkTypes.Where(l => l.UrlPattern == null).ToListAsync();
+            foreach (var lt in emptyPatterns)
+            {
+                if (defaultPatterns.TryGetValue(lt.Name, out var pattern))
+                    lt.UrlPattern = pattern;
+            }
+            if (emptyPatterns.Count > 0) await db.SaveChangesAsync();
+
+            if (!await db.LinkTypes.AnyAsync(l => l.Name == "Axure"))
+            {
+                var maxSort = await db.LinkTypes.MaxAsync(l => (int?)l.SortOrder) ?? 0;
+                db.LinkTypes.Add(new LinkTypeEntity
+                {
+                    Name = "Axure", Color = "#00A5E6", Icon = "Dashboard",
+                    UrlPattern = "axshare.com", SortOrder = maxSort + 1
+                });
+                await db.SaveChangesAsync();
+            }
         }
 
         // 이미 데이터가 있으면 건너뜀

@@ -1,0 +1,174 @@
+@page "/settings/backup"
+
+@inject SettingsApiClient SettingsApi
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>DB 백업</PageTitle>
+
+<MudStack Row AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/settings"))" />
+    <MudIcon Icon="@Icons.Material.Filled.Backup" Color="Color.Primary" />
+    <MudText Typo="Typo.h5">DB 백업</MudText>
+</MudStack>
+
+@* 자동 백업 설정 *@
+<MudPaper Class="pa-4 dtl-section mb-4" Elevation="0">
+    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight:600;">자동 백업 설정</MudText>
+    @if (_settings is not null)
+    {
+        <MudStack Row Spacing="3" AlignItems="AlignItems.Center">
+            <MudChip T="string" Color="@(_settings.Enabled ? Color.Success : Color.Default)" Size="Size.Small">
+                @(_settings.Enabled ? "활성" : "비활성")
+            </MudChip>
+            <MudText Typo="Typo.body2">매일 @_settings.ScheduleTime 자동 백업</MudText>
+            <MudText Typo="Typo.body2">보관: @(_settings.RetentionDays)일</MudText>
+            <MudText Typo="Typo.body2">최대: @(_settings.MaxBackupCount)개</MudText>
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">* 자동 백업 설정은 appsettings.json의 BackupSettings 섹션에서 변경</MudText>
+    }
+</MudPaper>
+
+@* 수동 백업 *@
+<MudPaper Class="pa-4 dtl-section mb-4" Elevation="0">
+    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight:600;">수동 백업</MudText>
+    <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+        <MudTextField T="string" @bind-Value="_description" Label="설명 (선택)" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:300px;" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Backup"
+                   OnClick="CreateBackupAsync" Disabled="_saving">
+            @(_saving ? "백업 중..." : "지금 백업")
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@* 백업 목록 *@
+<MudPaper Class="pa-4 dtl-section" Elevation="0">
+    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight:600;">백업 목록</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate />
+    }
+    else if (_backups.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">백업이 없습니다.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense Hover Striped Style="border-radius:8px;">
+            <thead>
+                <tr>
+                    <th>파일명</th>
+                    <th style="width:80px;">크기</th>
+                    <th style="width:80px;">유형</th>
+                    <th>설명</th>
+                    <th style="width:160px;">생성일시</th>
+                    <th style="width:120px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var b in _backups)
+                {
+                    <tr>
+                        <td><MudText Typo="Typo.body2">@b.FileName</MudText></td>
+                        <td><MudText Typo="Typo.body2">@b.FileSizeDisplay</MudText></td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@(b.BackupType == "Auto" ? Color.Info : Color.Default)">
+                                @b.BackupType
+                            </MudChip>
+                        </td>
+                        <td><MudText Typo="Typo.body2" Class="mud-text-secondary">@(b.Description ?? "-")</MudText></td>
+                        <td><MudText Typo="Typo.body2">@b.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText></td>
+                        <td style="text-align:right;">
+                            <MudTooltip Text="복원">
+                                <MudIconButton Icon="@Icons.Material.Filled.RestorePage" Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => RestoreAsync(b))" />
+                            </MudTooltip>
+                            <MudTooltip Text="삭제">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => DeleteAsync(b))" />
+                            </MudTooltip>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+@code {
+    private List<DatabaseBackupDto> _backups = [];
+    private BackupSettingsDto? _settings;
+    private bool _loading = true;
+    private bool _saving;
+    private string _description = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _backups = await SettingsApi.GetBackupsAsync();
+            _settings = await SettingsApi.GetBackupSettingsAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task CreateBackupAsync()
+    {
+        if (_saving) return;
+        _saving = true;
+        try
+        {
+            var result = await SettingsApi.CreateBackupAsync(string.IsNullOrWhiteSpace(_description) ? null : _description);
+            _description = "";
+            await LoadAsync();
+            Snackbar.Add($"백업 완료: {result.FileName} ({result.FileSizeDisplay})", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"백업 실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task RestoreAsync(DatabaseBackupDto backup)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "DB 복원",
+            $"'{backup.FileName}'로 복원하시겠습니까?\n현재 DB는 자동 백업됩니다.",
+            yesText: "복원", cancelText: "취소");
+        if (confirmed != true) return;
+
+        try
+        {
+            await SettingsApi.RestoreBackupAsync(backup.Id);
+            await LoadAsync();
+            Snackbar.Add("복원 완료. 앱을 재시작하면 반영됩니다.", Severity.Warning);
+        }
+        catch (Exception ex) { Snackbar.Add($"복원 실패: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAsync(DatabaseBackupDto backup)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "백업 삭제",
+            $"'{backup.FileName}'을(를) 삭제하시겠습니까?",
+            yesText: "삭제", cancelText: "취소");
+        if (confirmed != true) return;
+
+        try
+        {
+            await SettingsApi.DeleteBackupAsync(backup.Id);
+            await LoadAsync();
+            Snackbar.Add("삭제되었습니다.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+    }
+}

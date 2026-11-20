@@ -1,4 +1,6 @@
 @page "/projects/{Id:long}"
+@using DevTodoList.Shared.Helpers
+@using DevTodoList.Shared.Enums
 
 @inject ProjectApiClient ProjectApi
 @inject TodoApiClient TodoApi
@@ -26,7 +28,11 @@ else
             <MudIcon Icon="@Icons.Material.Filled.Folder" />
         </MudAvatar>
         <MudText Typo="Typo.h5" Style="flex:1;">@_project.Name</MudText>
-        @if (_project.IsArchived)
+        @if (_project.Status == ProjectStatus.Live)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">라이브</MudChip>
+        }
+        else if (_project.Status == ProjectStatus.Archived)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">보관됨</MudChip>
         }
@@ -189,11 +195,21 @@ else
                 <tbody>
                     @foreach (var todo in AllTodos)
                     {
-                        var isOverdue = todo.DueDate.HasValue && todo.DueDate.Value.Date < DateTime.Today && todo.Status < TodoStatus.Done;
+                        var isOverdue = todo.DueDate.HasValue && todo.DueDate.Value.Date < DateTime.Today && EffectiveStatus(todo) < TodoStatus.Done;
                         <tr class="dtl-list-item" style="cursor:pointer;" @onclick="@(() => Navigation.NavigateTo($"/todos/detail/{todo.Id}"))">
                             <td><MudIcon Icon="@PriorityIcon(todo.Priority)" Size="Size.Small" Color="@PriorityColor(todo.Priority)" /></td>
                             <td><MudText Typo="Typo.body2" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px;">@todo.Title</MudText></td>
-                            <td><MudChip T="string" Size="Size.Small" Color="@TodoStatusColor(todo.Status)" Variant="Variant.Filled">@TodoStatusText(todo.Status)</MudChip></td>
+                            <td>
+                                @if (todo.AssigneeType == AssigneeType.Others)
+                                {
+                                    var cs = OthersStatusHelper.Compute(todo.StartDate, todo.EndDate, todo.DueDate);
+                                    <MudChip T="string" Size="Size.Small" Color="@OthersColor(cs)" Variant="Variant.Filled">@OthersStatusHelper.ToLabel(cs)</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="@TodoStatusColor(todo.Status)" Variant="Variant.Filled">@TodoStatusText(todo.Status)</MudChip>
+                                }
+                            </td>
                             <td>
                                 @if (todo.DueDate.HasValue)
                                 {
@@ -340,18 +356,26 @@ else
         .ThenBy(x => x.t.Title)
         .ToList();
 
-    // TODO 통계
-    private int TodoTodoCount => _todos.Count(t => t.Status == TodoStatus.Todo);
-    private int TodoInProgressCount => _todos.Count(t => t.Status == TodoStatus.InProgress);
-    private int TodoDoneCount => _todos.Count(t => t.Status == TodoStatus.Done);
+    private TodoStatus EffectiveStatus(TodoItemDto t) =>
+        t.AssigneeType == AssigneeType.Others
+            ? OthersStatusHelper.Compute(t.StartDate, t.EndDate, t.DueDate) switch
+            {
+                OthersStatusHelper.ComputedStatus.Done or OthersStatusHelper.ComputedStatus.EarlyDone or OthersStatusHelper.ComputedStatus.LateDone => TodoStatus.Done,
+                OthersStatusHelper.ComputedStatus.InProgress or OthersStatusHelper.ComputedStatus.Overdue => TodoStatus.InProgress,
+                _ => TodoStatus.Todo
+            }
+            : t.Status;
+    private int TodoTodoCount => _todos.Count(t => EffectiveStatus(t) == TodoStatus.Todo);
+    private int TodoInProgressCount => _todos.Count(t => EffectiveStatus(t) == TodoStatus.InProgress);
+    private int TodoDoneCount => _todos.Count(t => EffectiveStatus(t) == TodoStatus.Done);
     private int TodoArchivedCount => _todos.Count(t => t.Status == TodoStatus.Archived);
     private int TodoNonArchived => _todos.Count - TodoArchivedCount;
     private double TodoCompletionPct => TodoNonArchived > 0
         ? (double)TodoDoneCount / TodoNonArchived * 100 : 0;
     private int OverdueCount => _todos.Count(t =>
-        t.Status < TodoStatus.Done && t.DueDate.HasValue && t.DueDate.Value.Date < DateTime.Today);
+        EffectiveStatus(t) < TodoStatus.Done && t.DueDate.HasValue && t.DueDate.Value.Date < DateTime.Today);
     private List<TodoItemDto> AllTodos => _todos
-        .OrderBy(t => t.Status).ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
+        .OrderBy(t => EffectiveStatus(t)).ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList();
 
     // 케이스 통계
     private int CaseOpenCount => _cases.Count(c => c.CaseStatus == CaseStatus.Open);
@@ -378,6 +402,7 @@ else
     // TODO 헬퍼
     static Color TodoStatusColor(TodoStatus s) => s switch { TodoStatus.Todo => Color.Default, TodoStatus.InProgress => Color.Info, TodoStatus.Done => Color.Success, TodoStatus.Archived => Color.Default, _ => Color.Default };
     static string TodoStatusText(TodoStatus s) => s.ToKorean();
+    static Color OthersColor(OthersStatusHelper.ComputedStatus cs) => cs switch { OthersStatusHelper.ComputedStatus.Todo => Color.Default, OthersStatusHelper.ComputedStatus.InProgress => Color.Info, OthersStatusHelper.ComputedStatus.Overdue => Color.Error, OthersStatusHelper.ComputedStatus.Done => Color.Success, OthersStatusHelper.ComputedStatus.EarlyDone => Color.Success, OthersStatusHelper.ComputedStatus.LateDone => Color.Warning, _ => Color.Default };
     static Color PriorityColor(TodoPriority p) => p switch { TodoPriority.Urgent => Color.Error, TodoPriority.High => Color.Warning, TodoPriority.Normal => Color.Info, _ => Color.Default };
     static string PriorityIcon(TodoPriority p) => p switch { TodoPriority.Urgent => Icons.Material.Filled.ErrorOutline, TodoPriority.High => Icons.Material.Filled.PriorityHigh, _ => Icons.Material.Filled.Circle };
 

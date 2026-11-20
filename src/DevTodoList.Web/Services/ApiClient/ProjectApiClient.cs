@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using DevTodoList.Shared.DTOs;
 using DevTodoList.Shared.DTOs.Requests;
+using DevTodoList.Shared.Enums;
 
 namespace DevTodoList.Web.Services.ApiClient;
 
@@ -31,6 +32,12 @@ public class ProjectApiClient(IHttpClientFactory factory)
     public async Task DeleteAsync(long id)
     {
         var res = await Http.DeleteAsync($"api/projects/{id}");
+        await res.EnsureSuccessOrThrowAsync();
+    }
+
+    public async Task UpdateStatusAsync(long id, ProjectStatus status)
+    {
+        var res = await Http.PutAsJsonAsync($"api/projects/{id}/status", new UpdateProjectStatusRequest { Status = status });
         await res.EnsureSuccessOrThrowAsync();
     }
 

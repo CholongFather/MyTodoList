@@ -3,6 +3,7 @@
 @inject CaseApiClient CaseApi
 @inject ProjectApiClient ProjectApi
 @inject EnvironmentApiClient EnvApi
+@inject WorkerApiClient WorkerApi
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -193,8 +194,12 @@ else
             </MudStack>
 
             <MudStack Row Spacing="2">
-                <MudTextField @bind-Value="_form.Reporter" Label="보고자" Variant="Variant.Outlined" Style="flex:1;" />
-                <MudTextField @bind-Value="_form.Assignee" Label="담당자" Variant="Variant.Outlined" Style="flex:1;" />
+                <MudSelect T="string" @bind-Value="_form.Reporter" Label="보고자" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var w in _workers) { <MudSelectItem T="string" Value="w.Name">@w.Name</MudSelectItem> }
+                </MudSelect>
+                <MudSelect T="string" @bind-Value="_form.Assignee" Label="담당자" Variant="Variant.Outlined" Clearable Style="flex:1;">
+                    @foreach (var w in _workers) { <MudSelectItem T="string" Value="w.Name">@w.Name</MudSelectItem> }
+                </MudSelect>
             </MudStack>
 
         </MudStack>
@@ -213,6 +218,7 @@ else
     private List<CaseDto> _filtered = [];
     private List<ProjectDto> _projects = [];
     private List<EnvironmentDto> _environments = [];
+    private List<WorkerDto> _workers = [];
     private bool _loading = true;
     private bool _saving;
     private bool _dialogVisible;
@@ -231,6 +237,7 @@ else
         {
             _projects = await ProjectApi.GetAllAsync();
             _environments = await EnvApi.GetAllAsync();
+            _workers = await WorkerApi.GetAllAsync();
         }
         catch { /* 로드 실패 시 빈 목록 */}
         await LoadAsync();
@@ -277,7 +284,8 @@ else
 
     private void OpenCreateDialog()
     {
-        _form = new CreateCaseRequest { Priority = 1 };
+        var me = _workers.FirstOrDefault(w => w.IsMe)?.Name;
+        _form = new CreateCaseRequest { Priority = 1, Reporter = me };
         _dialogVisible = true;
     }
 

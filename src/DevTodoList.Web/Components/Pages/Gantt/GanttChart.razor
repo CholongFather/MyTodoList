@@ -6,6 +6,7 @@
 @inject HolidayApiClient HolidayApi
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>간트 차트</PageTitle>
 
@@ -93,7 +94,7 @@ else
                         @for (var d = _viewStart; d <= _viewEnd; d = d.AddDays(1))
                         {
                             var isWeekend = d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-                            var isToday = d.Date == DateTime.UtcNow.Date;
+                            var isToday = d.Date == DateTime.Today;
                             var isHoliday = _holidaySet.Contains(d.Date);
                             var holidayName = isHoliday ? _holidayNames.GetValueOrDefault(d.Date) : null;
                             <div style="width:@(_dayWidth)px; text-align:center; font-size:11px; line-height:@(GanttDefaults.HeaderRowHeight)px; border-right:1px solid var(--mud-palette-table-lines); background:@(isToday ? "rgba(244,67,54,0.1)" : isHoliday ? "rgba(244,67,54,0.08)" : isWeekend ? "var(--mud-palette-action-default-hover)" : "transparent"); color:@(isToday ? "var(--mud-palette-error)" : isHoliday ? "var(--mud-palette-error)" : isWeekend ? "var(--mud-palette-text-disabled)" : "var(--mud-palette-text-secondary)"); font-weight:@(isToday || isHoliday ? "700" : "400");"
@@ -134,7 +135,7 @@ else
                                 }
                                 else if (row.Item!.TeamName is not null)
                                 {
-                                    <span style="font-size:10px; color:var(--mud-palette-text-disabled); margin-left:4px;">(@row.Item!.TeamName)</span>
+                                    <span style="font-size:10px; color:var(--mud-palette-text-secondary); margin-left:4px; font-weight:500;">(@row.Item!.TeamName)</span>
                                 }
                             </div>
                         }
@@ -211,7 +212,7 @@ else
                             <div style="position:absolute; top:0; bottom:0; left:@(off * _dayWidth)px; width:@(_dayWidth)px; background:@(isHol ? "rgba(244,67,54,0.06)" : "rgba(0,0,0,0.03)");"></div>
                         }
                     }
-                    @{ var todayOff = (DateTime.UtcNow.Date - _viewStart).Days; }
+                    @{ var todayOff = (DateTime.Today - _viewStart).Days; }
                     @if (todayOff >= 0 && todayOff <= TotalDays)
                     {
                         <div style="position:absolute; top:0; bottom:0; left:@(todayOff * _dayWidth + _dayWidth / 2)px; width:2px; background:var(--mud-palette-error); z-index:5;"></div>
@@ -249,11 +250,23 @@ else
     private int TotalRowsHeight => _rows.Sum(r =>
         r.IsProjectHeader ? GanttDefaults.HeaderRowHeight : (r.Item!.PlannedStartDate.HasValue && r.Item!.PlannedEndDate.HasValue ? GanttDefaults.DualBarRowHeight : GanttDefaults.SingleBarRowHeight));
 
+    private bool _needScrollToToday;
+
     protected override async Task OnInitializedAsync()
     {
         _projects = await ProjectApi.GetAllAsync();
         _teams = await TeamApi.GetAllAsync();
         await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needScrollToToday && _items.Count > 0)
+        {
+            _needScrollToToday = false;
+            var todayOffset = (DateTime.Today - _viewStart).Days * _dayWidth;
+            await JS.InvokeVoidAsync("ganttScrollSync.scrollToToday", ".gantt-scroll-container", GanttDefaults.LeftColumnWidth, todayOffset);
+        }
     }
 
     private async Task LoadAsync()
@@ -264,14 +277,15 @@ else
             _items = await GanttApi.GetAsync(_projectId, teamId: _teamId, assigneeType: _assigneeType.HasValue ? (AssigneeType)_assigneeType.Value : null);
             if (_items.Count > 0)
             {
-                var allDates = _items.SelectMany(x => new[] { x.StartDate, x.EndDate, x.PlannedStartDate ?? x.StartDate, x.PlannedEndDate ?? x.EndDate, x.ActualStartDate ?? x.StartDate, x.ActualEndDate ?? x.EndDate });
+                var allDates = _items.SelectMany(x => new[] { x.StartDate, x.EndDate, x.PlannedStartDate ?? x.StartDate, x.PlannedEndDate ?? x.EndDate, x.ActualStartDate ?? x.StartDate, x.ActualEndDate ?? x.EndDate }).ToList();
+                allDates.Add(DateTime.Today);
                 _viewStart = allDates.Min().AddDays(-GanttDefaults.MarginBefore);
                 _viewEnd = allDates.Max().AddDays(GanttDefaults.MarginAfter);
             }
             else
             {
-                _viewStart = DateTime.UtcNow.AddDays(-GanttDefaults.EmptyViewBefore);
-                _viewEnd = DateTime.UtcNow.AddDays(GanttDefaults.EmptyViewAfter);
+                _viewStart = DateTime.Today.AddDays(-GanttDefaults.EmptyViewBefore);
+                _viewEnd = DateTime.Today.AddDays(GanttDefaults.EmptyViewAfter);
             }
             try
             {
@@ -282,6 +296,7 @@ else
             catch { }
 
             BuildRows();
+            _needScrollToToday = true;
         }
         catch (Exception ex) { Snackbar.Add($"간트 데이터 로드 실패: {ex.Message}", Severity.Error); }
         finally { _loading = false; }

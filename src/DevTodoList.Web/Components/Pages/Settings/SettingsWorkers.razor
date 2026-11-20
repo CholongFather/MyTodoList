@@ -67,7 +67,7 @@
             <MudTextField T="string" @bind-Value="_newName" Label="작업자 이름" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;" />
             <div style="width:28px;height:28px;border-radius:50%;background:@_newColor;border:2px solid #ddd;flex-shrink:0;"></div>
             <MudTextField T="string" @bind-Value="_newColor" Label="색상" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:100px;" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">추가</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="AddAsync" Disabled="@(string.IsNullOrWhiteSpace(_newName) || _saving)">추가</MudButton>
         </MudStack>
     }
 </MudPaper>
@@ -75,6 +75,7 @@
 @code {
     private List<WorkerDto> _workers = [];
     private bool _loading = true;
+    private bool _saving;
     private string _newName = "", _newColor = "";
     private long? _editingId;
     private string _editName = "", _editColor = "";
@@ -89,12 +90,15 @@
 
     private async Task LoadAsync()
     {
-        try { _workers = await WorkerApi.GetAllAsync(); } catch { } finally { _loading = false; }
+        try { _workers = await WorkerApi.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"목록 로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
     }
 
     private async Task AddAsync()
     {
-        if (string.IsNullOrWhiteSpace(_newName)) return;
+        if (string.IsNullOrWhiteSpace(_newName) || _saving) return;
+        _saving = true;
         try
         {
             await WorkerApi.CreateAsync(new CreateWorkerRequest { Name = _newName, Color = _newColor });
@@ -104,6 +108,7 @@
             Snackbar.Add("작업자가 추가되었습니다.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
     }
 
     private void StartEdit(WorkerDto w) { _editingId = w.Id; _editName = w.Name; _editColor = w.Color; }

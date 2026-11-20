@@ -49,6 +49,9 @@ public class BusCommuteSettingEntity : EntityBase
     [MaxLength(50)]
     public string AlertThresholds { get; set; } = BusCommuteDefaults.AlertThresholds;
 
+    /// <summary>GBIS 조회 주기 (초, 기본 30)</summary>
+    public int CheckIntervalSeconds { get; set; } = 30;
+
     /// <summary>활성화 여부</summary>
     public bool IsEnabled { get; set; } = BusCommuteDefaults.IsEnabled;
 

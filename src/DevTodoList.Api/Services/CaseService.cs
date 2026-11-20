@@ -216,10 +216,10 @@ public class CaseService(AppDbContext db)
         return entity.ToDto();
     }
 
-    public async Task<CaseNoteDto?> UpdateNoteAsync(long noteId, CreateCaseNoteRequest req, CancellationToken ct = default)
+    public async Task<CaseNoteDto?> UpdateNoteAsync(long caseId, long noteId, CreateCaseNoteRequest req, CancellationToken ct = default)
     {
         var entity = await db.CaseNotes.FindAsync([noteId], ct);
-        if (entity is null) return null;
+        if (entity is null || entity.CaseId != caseId) return null;
 
         entity.Content = req.Content;
         entity.NoteType = (int)req.NoteType;
@@ -232,10 +232,10 @@ public class CaseService(AppDbContext db)
         return entity.ToDto();
     }
 
-    public async Task<bool> DeleteNoteAsync(long noteId, CancellationToken ct = default)
+    public async Task<bool> DeleteNoteAsync(long caseId, long noteId, CancellationToken ct = default)
     {
         var entity = await db.CaseNotes.FindAsync([noteId], ct);
-        if (entity is null) return false;
+        if (entity is null || entity.CaseId != caseId) return false;
         db.CaseNotes.Remove(entity);
         await db.SaveChangesAsync(ct);
         return true;
@@ -260,20 +260,20 @@ public class CaseService(AppDbContext db)
         return entity.ToDto();
     }
 
-    public async Task<CaseLinkDto?> UpdateLinkAsync(long linkId, CreateLinkRequest req, CancellationToken ct = default)
+    public async Task<CaseLinkDto?> UpdateLinkAsync(long caseId, long linkId, CreateLinkRequest req, CancellationToken ct = default)
     {
         var entity = await db.CaseLinks.FindAsync([linkId], ct);
-        if (entity is null) return null;
+        if (entity is null || entity.CaseId != caseId) return null;
         entity.Title = req.Title;
         entity.Url = req.Url;
         await db.SaveChangesAsync(ct);
         return entity.ToDto();
     }
 
-    public async Task<bool> DeleteLinkAsync(long linkId, CancellationToken ct = default)
+    public async Task<bool> DeleteLinkAsync(long caseId, long linkId, CancellationToken ct = default)
     {
         var entity = await db.CaseLinks.FindAsync([linkId], ct);
-        if (entity is null) return false;
+        if (entity is null || entity.CaseId != caseId) return false;
         db.CaseLinks.Remove(entity);
         await db.SaveChangesAsync(ct);
         return true;

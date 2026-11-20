@@ -17,6 +17,9 @@ public class LinkService(AppDbContext db)
 
     public async Task<TodoLinkDto> CreateAsync(long todoId, CreateLinkRequest req, CancellationToken ct = default)
     {
+        if (!await db.TodoItems.AnyAsync(t => t.Id == todoId, ct))
+            throw new KeyNotFoundException($"할일 ID {todoId}이(가) 존재하지 않습니다.");
+
         // FK 검증: LinkTypeId가 지정된 경우 존재 확인
         if (req.LinkTypeId.HasValue && !await db.LinkTypes.AnyAsync(l => l.Id == req.LinkTypeId.Value, ct))
             throw new InvalidOperationException($"링크 유형 ID {req.LinkTypeId}이(가) 존재하지 않습니다.");
@@ -36,10 +39,10 @@ public class LinkService(AppDbContext db)
         return entity.ToDto();
     }
 
-    public async Task<TodoLinkDto?> UpdateAsync(long id, CreateLinkRequest req, CancellationToken ct = default)
+    public async Task<TodoLinkDto?> UpdateAsync(long todoId, long id, CreateLinkRequest req, CancellationToken ct = default)
     {
         var entity = await db.TodoLinks.FindAsync([id], ct);
-        if (entity is null) return null;
+        if (entity is null || entity.TodoItemId != todoId) return null;
         entity.Title = req.Title;
         entity.Url = req.Url;
         entity.LinkType = (int)req.LinkType;
@@ -51,10 +54,10 @@ public class LinkService(AppDbContext db)
         return entity.ToDto();
     }
 
-    public async Task<bool> DeleteAsync(long id, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(long todoId, long id, CancellationToken ct = default)
     {
         var entity = await db.TodoLinks.FindAsync([id], ct);
-        if (entity is null) return false;
+        if (entity is null || entity.TodoItemId != todoId) return false;
         db.TodoLinks.Remove(entity);
         await db.SaveChangesAsync(ct);
         return true;

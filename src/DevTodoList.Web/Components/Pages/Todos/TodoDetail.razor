@@ -107,18 +107,22 @@ else
             @* 계획일 *@
             <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedStartDate" @bind-Date:after="AutoSaveAsync" Label="계획 시작일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
             <MudItem xs="12" sm="4"><MudDatePicker @bind-Date="_plannedEndDate" @bind-Date:after="AutoSaveAsync" Label="계획 마감일" Variant="Variant.Outlined" Clearable DateFormat="yyyy-MM-dd" /></MudItem>
-            @* 실제 일정 표시 *@
-            @if (_todo?.ActualStartDate.HasValue == true || _todo?.IsDelayed == true)
+            @* 실제 일정 / 지연 표시 *@
+            @{
+                var delayInfo = GetDelayInfo();
+                var hasActual = _todo?.ActualStartDate.HasValue == true;
+            }
+            @if (hasActual || delayInfo is not null)
             {
                 <MudItem xs="12">
-                    <MudAlert Severity="Severity.Info" Dense Variant="Variant.Text" Class="mt-0">
-                        @if (_todo.ActualStartDate.HasValue)
+                    <MudAlert Severity="@(delayInfo is not null ? Severity.Warning : Severity.Info)" Dense Variant="Variant.Text" Class="mt-0">
+                        @if (hasActual)
                         {
-                            <span><b>실제:</b> @_todo.ActualStartDate?.ToString("yyyy-MM-dd") ~ @(_todo.ActualEndDate?.ToString("yyyy-MM-dd") ?? "진행중")</span>
+                            <span><b>실제:</b> @_todo!.ActualStartDate?.ToString("yyyy-MM-dd") ~ @(_todo.ActualEndDate?.ToString("yyyy-MM-dd") ?? "진행중")</span>
                         }
-                        @if (_todo.IsDelayed)
+                        @if (delayInfo is not null)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@(_todo.DelayDays)일 지연</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="@delayInfo.Value.ChipColor" Variant="Variant.Filled" Class="ml-2">@delayInfo.Value.Text</MudChip>
                         }
                     </MudAlert>
                 </MudItem>
@@ -205,13 +209,30 @@ else
         </div>
         @foreach (var link in _todo.Links)
         {
-            <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-                <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Style="@(link.LinkTypeColor is not null ? $"color:{link.LinkTypeColor}" : "")" />
-                <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover">@(string.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title)</MudLink>
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="@(link.LinkTypeColor is not null ? $"border-color:{link.LinkTypeColor};color:{link.LinkTypeColor}" : "")">@(link.LinkTypeName ?? link.LinkType.ToKorean())</MudChip>
-                <MudSpacer />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => DeleteLink(link)" />
-            </MudStack>
+            @if (_editingLinkId == link.Id)
+            {
+                @* 인라인 편집 모드 *@
+                <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudTextField @bind-Value="_editLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
+                    <MudTextField @bind-Value="_editLink.Url" @bind-Value:after="OnEditLinkUrlChanged" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:2;" />
+                    <MudSelect T="long?" @bind-Value="_editLink.LinkTypeId" Label="유형" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:120px;" AnchorOrigin="Origin.BottomCenter" Clearable>
+                        @foreach (var lt in _allLinkTypes) { <MudSelectItem T="long?" Value="lt.Id">@lt.Name</MudSelectItem> }
+                    </MudSelect>
+                    <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" OnClick="SaveEditLink" Disabled="@string.IsNullOrWhiteSpace(_editLink.Url)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Default" Size="Size.Small" OnClick="CancelEditLink" />
+                </MudStack>
+            }
+            else
+            {
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Style="@(link.LinkTypeColor is not null ? $"color:{link.LinkTypeColor}" : "")" />
+                    <MudLink Href="@link.Url" Target="_blank" Underline="Underline.Hover">@(string.IsNullOrWhiteSpace(link.Title) ? link.Url : link.Title)</MudLink>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="@(link.LinkTypeColor is not null ? $"border-color:{link.LinkTypeColor};color:{link.LinkTypeColor}" : "")">@(link.LinkTypeName ?? link.LinkType.ToKorean())</MudChip>
+                    <MudSpacer />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default" OnClick="() => StartEditLink(link)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => DeleteLink(link)" />
+                </MudStack>
+            }
         }
         <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
             <MudTextField @bind-Value="_newLink.Title" Label="제목" Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;" />
@@ -246,6 +267,8 @@ else
     private DateTime? _plannedStartDate, _plannedEndDate;
     private string? _newCheck;
     private CreateLinkRequest _newLink = new();
+    private CreateLinkRequest _editLink = new();
+    private long? _editingLinkId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -417,6 +440,38 @@ else
     private async Task DeleteLink(TodoLinkDto link)
     { try { await TodoApi.DeleteLinkAsync(Id, link.Id); _todo!.Links.Remove(link); } catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); } }
 
+    /// <summary>링크 편집 시작</summary>
+    private void StartEditLink(TodoLinkDto link)
+    {
+        _editingLinkId = link.Id;
+        _editLink = new() { Title = link.Title, Url = link.Url, LinkTypeId = link.LinkTypeId, LinkType = link.LinkType };
+    }
+
+    private void CancelEditLink() { _editingLinkId = null; _editLink = new(); }
+
+    private void OnEditLinkUrlChanged()
+    {
+        var detected = DevTodoList.Shared.Helpers.LinkTypeDetector.Detect(_editLink.Url, _allLinkTypes);
+        if (detected.HasValue) _editLink.LinkTypeId = detected;
+    }
+
+    /// <summary>링크 편집 저장</summary>
+    private async Task SaveEditLink()
+    {
+        if (_editingLinkId is null || string.IsNullOrWhiteSpace(_editLink.Url)) return;
+        try
+        {
+            var updated = await TodoApi.UpdateLinkAsync(Id, _editingLinkId.Value, _editLink);
+            if (updated is not null)
+            {
+                var idx = _todo!.Links.FindIndex(l => l.Id == _editingLinkId);
+                if (idx >= 0) _todo.Links[idx] = updated;
+            }
+            _editingLinkId = null; _editLink = new();
+        }
+        catch (Exception ex) { Snackbar.Add($"링크 수정 실패: {ex.Message}", Severity.Error); }
+    }
+
     private async Task DeleteAsync()
     {
         var confirmed = await DialogService.ShowMessageBoxAsync("할일 삭제", $"'{_todo!.Title}'을(를) 삭제하시겠습니까?", yesText: "삭제", cancelText: "취소");
@@ -472,4 +527,36 @@ else
         OthersStatusHelper.ComputedStatus.LateDone => Color.Warning,
         _ => Color.Default
     };
+
+    /// <summary>지연/초과 정보 계산 (실제에 맞게)</summary>
+    private (string Text, Color ChipColor)? GetDelayInfo()
+    {
+        if (_todo is null) return null;
+
+        if (_todo.AssigneeType == AssigneeType.Others)
+        {
+            var cs = OthersStatusHelper.Compute(_todo.StartDate, _todo.EndDate, _todo.DueDate);
+            return cs switch
+            {
+                OthersStatusHelper.ComputedStatus.Overdue when _todo.DueDate.HasValue
+                    => ($"{(DateTime.Today - _todo.DueDate.Value).Days}일 초과", Color.Error),
+                OthersStatusHelper.ComputedStatus.LateDone when _todo.EndDate.HasValue && _todo.DueDate.HasValue
+                    => ($"{(_todo.EndDate.Value - _todo.DueDate.Value).Days}일 지연완료", Color.Warning),
+                _ => null
+            };
+        }
+
+        if (_todo.Status == TodoStatus.InProgress && _todo.DueDate.HasValue && DateTime.Today > _todo.DueDate.Value)
+        {
+            return ($"{(DateTime.Today - _todo.DueDate.Value).Days}일 초과", Color.Error);
+        }
+
+        if (_todo.Status == TodoStatus.Done && _todo.PlannedEndDate.HasValue && _todo.DueDate.HasValue
+            && _todo.DueDate.Value > _todo.PlannedEndDate.Value)
+        {
+            return ($"{(_todo.DueDate.Value - _todo.PlannedEndDate.Value).Days}일 지연", Color.Warning);
+        }
+
+        return null;
+    }
 }

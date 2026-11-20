@@ -74,13 +74,13 @@ public class CasesController(CaseService svc) : ControllerBase
     [HttpPut("{caseId:long}/notes/{noteId:long}")]
     public async Task<IActionResult> UpdateNote(long caseId, long noteId, [FromBody] CreateCaseNoteRequest req, CancellationToken ct)
     {
-        var result = await svc.UpdateNoteAsync(noteId, req, ct);
+        var result = await svc.UpdateNoteAsync(caseId, noteId, req, ct);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpDelete("{caseId:long}/notes/{noteId:long}")]
     public async Task<IActionResult> DeleteNote(long caseId, long noteId, CancellationToken ct)
-        => await svc.DeleteNoteAsync(noteId, ct) ? NoContent() : NotFound();
+        => await svc.DeleteNoteAsync(caseId, noteId, ct) ? NoContent() : NotFound();
 
     // === 링크 ===
 
@@ -91,11 +91,11 @@ public class CasesController(CaseService svc) : ControllerBase
     [HttpPut("{caseId:long}/links/{linkId:long}")]
     public async Task<IActionResult> UpdateLink(long caseId, long linkId, [FromBody] CreateLinkRequest req, CancellationToken ct)
     {
-        var result = await svc.UpdateLinkAsync(linkId, req, ct);
+        var result = await svc.UpdateLinkAsync(caseId, linkId, req, ct);
         return result is not null ? Ok(result) : NotFound();
     }
 
     [HttpDelete("{caseId:long}/links/{linkId:long}")]
     public async Task<IActionResult> DeleteLink(long caseId, long linkId, CancellationToken ct)
-        => await svc.DeleteLinkAsync(linkId, ct) ? NoContent() : NotFound();
+        => await svc.DeleteLinkAsync(caseId, linkId, ct) ? NoContent() : NotFound();
 }

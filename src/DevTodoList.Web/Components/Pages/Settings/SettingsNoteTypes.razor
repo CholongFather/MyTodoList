@@ -72,6 +72,7 @@
 @code {
     private List<NoteTypeDto> _noteTypes = [];
     private bool _loading = true;
+    private bool _saving;
     private string _newName = "", _newColor = "";
     private string? _newIcon;
     private long? _editingId;
@@ -109,12 +110,15 @@
 
     private async Task LoadAsync()
     {
-        try { _noteTypes = await NoteTypeApi.GetAllAsync(); } catch { } finally { _loading = false; }
+        try { _noteTypes = await NoteTypeApi.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"목록 로드 실패: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
     }
 
     private async Task AddAsync()
     {
-        if (string.IsNullOrWhiteSpace(_newName)) return;
+        if (string.IsNullOrWhiteSpace(_newName) || _saving) return;
+        _saving = true;
         try
         {
             await NoteTypeApi.CreateAsync(new CreateNoteTypeRequest { Name = _newName, Color = _newColor, Icon = _newIcon });
@@ -125,6 +129,7 @@
             Snackbar.Add("노트 유형이 추가되었습니다.", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"실패: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
     }
 
     private void StartEdit(NoteTypeDto nt) { _editingId = nt.Id; _editName = nt.Name; _editColor = nt.Color; _editIcon = nt.Icon; }

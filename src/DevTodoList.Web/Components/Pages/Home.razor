@@ -373,7 +373,7 @@ else
             var atTask = AssigneeTypeApi.GetAllAsync();
             await Task.WhenAll(dashTask, projTask, teamTask, atTask);
             _dashboard = dashTask.Result;
-            _projects = projTask.Result;
+            _projects = projTask.Result.Where(p => p.Status != DevTodoList.Shared.Enums.ProjectStatus.Archived).ToList();
             _teams = teamTask.Result;
             _assigneeTypes = atTask.Result;
             if (_projects.Count > 0) _quickProjectId = _projects[0].Id;

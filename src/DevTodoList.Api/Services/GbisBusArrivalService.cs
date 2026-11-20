@@ -114,17 +114,23 @@ public class BusArrivalInfo
     public string? StationName1 { get; set; }
     public string? StationName2 { get; set; }
 
-    /// <summary>알림 메시지용 요약</summary>
+    /// <summary>UI 카드용 요약 (차량번호 + 예상 도착시각 포함)</summary>
     public string ToSummary()
     {
+        var now = DateTime.Now;
         var parts = new List<string>();
         if (PredictTime1 > 0)
         {
+            var eta = now.AddMinutes(PredictTime1).ToString("HH:mm");
             var seat = RemainSeat1 > 0 ? $", 빈자리 {RemainSeat1}석" : "";
-            parts.Add($"{PredictTime1}분 후 ({LocationNo1}정거장 전{seat})");
+            var plate = !string.IsNullOrEmpty(PlateNo1) ? $" [{PlateNo1}]" : "";
+            parts.Add($"{PredictTime1}분 후 (예상: {eta}, {LocationNo1}정거장 전{seat}){plate}");
         }
         if (PredictTime2 > 0)
-            parts.Add($"다음 {PredictTime2}분 후");
+        {
+            var eta2 = now.AddMinutes(PredictTime2).ToString("HH:mm");
+            parts.Add($"다음 {PredictTime2}분 후 (예상: {eta2})");
+        }
         return parts.Count > 0 ? string.Join(" / ", parts) : "운행 정보 없음";
     }
 

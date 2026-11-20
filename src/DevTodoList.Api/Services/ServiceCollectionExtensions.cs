@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<WorkerService>();
         services.AddScoped<NoteTypeService>();
         services.AddScoped<LinkTypeService>();
+        services.AddScoped<DatabaseBackupService>();
         return services;
     }
 }

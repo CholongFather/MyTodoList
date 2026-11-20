@@ -138,6 +138,14 @@ public class TodoApiClient(IHttpClientFactory factory)
         return await res.Content.ReadFromJsonAsync<TodoLinkDto>();
     }
 
+    /// <summary>링크 수정</summary>
+    public async Task<TodoLinkDto?> UpdateLinkAsync(long todoId, long linkId, CreateLinkRequest req)
+    {
+        var res = await Http.PutAsJsonAsync($"api/todos/{todoId}/links/{linkId}", req);
+        await res.EnsureSuccessOrThrowAsync();
+        return await res.Content.ReadFromJsonAsync<TodoLinkDto>();
+    }
+
     public async Task DeleteLinkAsync(long todoId, long linkId)
     {
         var res = await Http.DeleteAsync($"api/todos/{todoId}/links/{linkId}");
